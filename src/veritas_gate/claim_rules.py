@@ -81,12 +81,30 @@ def load_rules(source: Any) -> tuple:
         return tuple(source)
     if not isinstance(source, (str, Path)):
         return ()
+
+    # Resolve to text FIRST, and keep the is-it-a-path question strictly separate from the
+    # is-it-valid-JSON question. Collapsing the two hides two different platform traps:
+    #   * Path("") normalizes to Path("."), so exists() is True for an empty string and reading it
+    #     raises PermissionError on a directory. Hence is_file(), not exists().
+    #   * Path(<a long JSON string>).is_file() RAISES OSError (ENAMETOOLONG) on Linux once the
+    #     string exceeds ~255 bytes, while Windows quietly returns False. A single try block around
+    #     both steps swallowed that and returned no rules for every realistic JSON payload -- green
+    #     on Windows, red on CI.
+    text: Optional[str] = None
     try:
-        # is_file(), not exists(): Path("") normalizes to Path("."), so an empty string would
-        # otherwise be treated as a path and raise PermissionError trying to read a directory.
-        text = Path(source).read_text(encoding="utf-8") if Path(source).is_file() else str(source)
-        parsed = json.loads(text)
+        candidate = Path(source)
+        if candidate.is_file():
+            text = candidate.read_text(encoding="utf-8")
     except (OSError, ValueError):
+        text = None          # not a usable path; fall through to treating it as JSON
+    if text is None:
+        if isinstance(source, Path):
+            return ()        # an explicit Path that is not readable is an error, not JSON
+        text = source
+
+    try:
+        parsed = json.loads(text)
+    except ValueError:
         return ()
     return tuple(parsed) if isinstance(parsed, list) else ()
 
