@@ -73,9 +73,11 @@ capped near 0.21 by construction.
 The one number that holds up is precision: when it fires, it is right 50% of the time against a
 34.9% base rate. The interval's lower bound is 36.6%, so even that is weak evidence of lift.
 
-**Speed and determinism do hold.** 0.343–0.361 ms per response across three warm runs, and the
-results file is byte-identical across runs. Roughly four orders of magnitude faster than a judge
-call, with no drift. That is real, and it is the honest reason to reach for rules: as a cheap
+**Speed and determinism do hold.** Across three runs of the full test split: 0.288–0.298 ms per
+response building a fresh checker and evidence bank each time, and 0.122–0.127 ms for `check()`
+alone once a checker is reused. `results.json` is byte-identical across runs, timing excluded from
+it on purpose. At a judge latency of 1–3 s that is three to four orders of magnitude cheaper, with
+no drift. That part is real, and it is the honest reason to reach for rules: as a cheap
 deterministic pre-filter inside a domain you have configured, not as a replacement for semantic
 verification.
 
