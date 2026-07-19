@@ -1,15 +1,16 @@
 # veritas-gate
 
-**Deterministic truth-gating and quality scoring for LLM-generated text — a fast, reproducible alternative to LLM-as-judge.**
+**A deterministic, domain-configured gate for LLM-generated text, and an honest measurement of how far that gets you.**
 
 ![ci](https://github.com/trentmilam/veritas-gate/actions/workflows/ci.yml/badge.svg)
 
-LLM-as-judge is non-deterministic, slow, and expensive to run on every generation. `veritas-gate`
-is a small, **zero-dependency** library that gates LLM output with **deterministic rules** instead:
-it traces every claim to an evidence bank (blocking fabrication and over-claiming), scores quality
-with a no-LLM rubric, and catches repetition-runaway that slips past both honesty checks and length
-floors. It's built for production pipelines that need an **auditable, repeatable** gate — not a vibe
-check — and as a reference for how to do **evals engineering** without an LLM judge.
+`veritas-gate` is a small, zero-dependency library that gates LLM output with deterministic rules
+instead of an LLM judge. You supply an evidence bank and a set of things the subject may not claim;
+it flags claims that contradict them, scores quality with a no-LLM rubric, and catches
+repetition-runaway that passes both honesty checks and length floors.
+
+It is fast, reproducible, and auditable. It is **not** a general hallucination detector, and this
+README includes the benchmark that shows exactly where the line is.
 
 ```python
 from veritas_gate import TruthChecker, rubric_score, is_degenerate
@@ -29,66 +30,113 @@ is_degenerate("AI futures, AI potentials, AI possibilities, " * 100)            
 
 Run the full demo: `python -m veritas_gate.example`
 
+## Measured against RAGTruth
+
+Most tools in this space assert that rules beat an LLM judge and stop there. This one was measured
+against [RAGTruth](https://github.com/ParticleMedia/RAGTruth) (Niu et al., ACL 2024), a corpus of
+human-annotated LLM responses labeled for hallucination against their source passages.
+
+Reproduce it:
+
+```bash
+python benchmark/fetch_data.py   # 36 MB, not vendored
+python benchmark/run.py
+```
+
+**What was measured.** Only the two checks whose decision logic contains no domain vocabulary:
+`unverified_metric` (a %/$/multiplier absent from the evidence) and `unverified_count` (a
+count-anchored magnitude absent from the evidence). Every résumé-specific rule was disabled, and
+predictions were filtered to those two violation types so nothing else could leak into the score.
+
+**Result** on the 2,700-response test split, 450 source clusters, 34.9% base rate:
+
+| | precision | recall | F1 |
+|---|---|---|---|
+| veritas-gate, generic-only | 50.0% `[36.6, 63.4]` | 2.7% `[1.8, 3.9]` | **5.0%** `[3.3, 7.1]` |
+| always-say-hallucinated | 34.9% | 100% | **51.8%** |
+| Prompt GPT-3.5-turbo † | 37.1% | 92.3% | 52.9% |
+| Prompt GPT-4-turbo † | 46.9% | 97.9% | 63.4% |
+| Finetuned Llama-2-13B † | 76.9% | 80.7% | 78.7% |
+
+† published in the RAGTruth paper, Table 5. Cited, not reproduced here.
+
+Precision and recall intervals are Wilson 95%. The F1 interval is a bootstrap that resamples whole
+source clusters, because six model responses share each source passage and a per-response interval
+would assume an independence the corpus does not have.
+
+**The generic checks do not beat a trivial classifier.** F1 5.0% against a 51.8% floor. That is the
+honest headline and it is not going to be tuned away, because the reason is structural: both
+surviving checks are digit matchers, and only 20.8% of RAGTruth's 14,289 annotated hallucination
+spans contain a digit at all. The rest are fabricated names, relations and entities. Recall is
+capped near 0.21 by construction.
+
+The one number that holds up is precision: when it fires, it is right 50% of the time against a
+34.9% base rate. The interval's lower bound is 36.6%, so even that is weak evidence of lift.
+
+**Speed and determinism do hold.** 0.343–0.361 ms per response across three warm runs, and the
+results file is byte-identical across runs. Roughly four orders of magnitude faster than a judge
+call, with no drift. That is real, and it is the honest reason to reach for rules: as a cheap
+deterministic pre-filter inside a domain you have configured, not as a replacement for semantic
+verification.
+
+**An aside worth its own line.** The RAGTruth paper's prompt-GPT-3.5 baseline scores F1 52.9%. The
+trivial always-say-hallucinated classifier scores 51.8% on the same split. A widely-cited
+LLM-as-judge baseline beats "always answer yes" by 1.1 points. Whatever else this benchmark shows,
+it is worth knowing what these numbers are being compared against.
+
+**What was not measured.** The résumé-specific rules (forbidden skills, credentials, employer
+attribution, the entity index, `rubric_score`) have no ground truth here and were excluded rather
+than scored on a corpus they were not built for. Span-level localization was not attempted; the gate
+returns a verdict, not character offsets.
+
 ## What it checks
 
-**`TruthChecker`** — deterministic claim → evidence verification:
-- **Fabrication / unsupported claims** — every claim must trace to the evidence bank.
-- **Forbidden & over-claim phrases** — substring-robust, whitespace-normalized.
+**`TruthChecker`** — deterministic verification against a configured evidence bank:
+- **Forbidden and over-claim phrases** — substring-robust, whitespace- and hyphen-normalized.
 - **Not-claimable skills** — word-boundary matched, with an **honest-omission whitelist** so
   *"I have no experience with X"* is a disclosure, not a claim.
-- **Unverified impact metrics & counts** — a `%`/`$`/`×`/large-count in the draft that isn't in the
-  evidence is flagged (provenance, not just presence).
-- **Misattribution** (optional) — flags a self-directed/personal-project signature listed under an
-  employer block; config-driven, inert unless you supply the markers.
-- **Credentials & named entities** — asserted but not evidenced → flagged.
+- **Unverified impact metrics and counts** — a `%`/`$`/`×`/large-count in the draft that is not in
+  the evidence is flagged. These are the two checks the benchmark above measures.
+- **Misattribution** (optional) — flags a personal-project signature under an employer block;
+  config-driven, inert unless you supply the markers.
+- **Credentials and named entities** — asserted but not evidenced, flagged.
 
-**`rubric_score`** — a deterministic 0–100 quality score (no LLM judge), built on the levers that
-actually move screening outcomes:
-- **keyword alignment** to the target without **stuffing** (over-repetition is penalized),
-- **title / intent alignment** (highest-weight real signal),
-- **real-metric density** (impact figures, not "any digit" / years / versions),
-- **parseable structure** (standard headers, no column-grid layouts).
+Note what this list is not: it does not parse arbitrary prose into claims and verify each one. It
+enforces the constraints you configure. The benchmark exists because that distinction matters and is
+easy to blur.
+
+**`rubric_score`** — a deterministic 0–100 quality score with no LLM judge, built on keyword
+alignment without stuffing, title and intent alignment, real-metric density, and parseable
+structure.
 
 **`is_degenerate`** — catches repetition-runaway output (collapsed vocabulary, or a long run of
 comma-items sharing a leading word) that passes both the honesty checks and any length floor.
 
-## Why deterministic?
-
-- **Reproducible** — same input, same verdict, every time. No temperature, no judge drift.
-- **Fast & free** — pure Python standard library, no model call, runs inline in a pipeline.
-- **Auditable** — every violation names the rule and a concrete fix, so you can explain *why* a
-  generation was gated (and write a regression test for it).
-
-It is **not** a semantic-understanding oracle — it's a fast first line of defense that catches the
-failure modes LLM pipelines hit most (fabrication, over-claiming, keyword-stuffing, runaway), which
-you'd otherwise pay an LLM judge to catch non-deterministically.
-
 ## Design notes
-
-A few decisions worth calling out (the interesting part):
 
 - **Blocklist → allowlist tradeoff.** Skill claims are gated by a not-claimable blocklist with an
   omission whitelist; the honest "no experience with X" sentence must pass while the affirmative
-  "expert in X" must fail. Per-clause omission detection prevents a separate honest sentence on the
-  same line from whitelisting an affirmative claim elsewhere on it.
-- **Calibrating anti-stuffing.** Aggregate keyword *density* wrongly penalizes a concise skills list
-  (legitimately keyword-dense), so the penalty keys on **per-term over-repetition** instead — a
-  central term may appear a few times; only the excess is docked.
-- **"Quantified" means a real impact metric.** Counting "any digit" rewards version numbers, years,
-  and "3 years"; the rubric counts only `%`/`$`/`×`/thousands/`k·m·b` magnitudes.
-- **Catching runaway that passes everything else.** A repetition loop is truth-valid (no false
-  claims) *and* long (passes any min-length floor), so it needs its own detector — unique-token
-  ratio plus a leading-word run check.
+  "expert in X" must fail. Per-clause detection prevents an honest sentence from whitelisting an
+  affirmative claim elsewhere on the same line.
+- **Calibrating anti-stuffing.** Aggregate keyword density wrongly penalizes a concise skills list,
+  so the penalty keys on per-term over-repetition instead; only the excess is docked.
+- **"Quantified" means a real impact metric.** Counting "any digit" rewards version numbers and
+  years; the rubric counts only `%`/`$`/`×`/thousands magnitudes.
+- **Catching runaway that passes everything else.** A repetition loop is truth-valid and long, so it
+  needs its own detector: unique-token ratio plus a leading-word run check.
+- **Vocabulary was not tuned on the benchmark.** The count-noun list ships unmodified even though it
+  is résumé vocabulary that barely fires on news text. Extending it by reading RAGTruth would be
+  inventing detector vocabulary from the evaluation corpus, which is the failure this measurement
+  exists to avoid. The near-zero fire rate is the honest cost.
 
-## Install & test
+## Install and test
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
 ```
 
-Zero runtime dependencies; tests are pure-Python and offline. CI runs the suite on Python 3.10–3.12
-(`.github/workflows/ci.yml`).
+Zero runtime dependencies; tests are pure-Python and offline. CI runs the suite on Python 3.10–3.12.
 
 ## License
 
