@@ -144,7 +144,26 @@ class TestLoading:
         p.write_text(json.dumps(PHRASE_RULES), encoding="utf-8")
         assert check_claim_rules("world class", load_rules(p))
 
-    @pytest.mark.parametrize("junk", [None, 42, {}, "", []])
+    def test_a_json_string_longer_than_a_filename_limit_still_parses(self):
+        """Platform trap that passed on Windows and failed on Linux CI.
+
+        Path(<long string>).is_file() RAISES OSError (ENAMETOOLONG) on Linux once the string
+        exceeds ~255 bytes, where Windows quietly returns False. With the path check and the JSON
+        parse in one try block, that error was swallowed and EVERY realistic JSON payload silently
+        loaded zero rules. Asserted on the byte length directly so the test is meaningful on any
+        platform rather than only where the limit bites."""
+        payload = json.dumps(PHRASE_RULES)
+        assert len(payload.encode()) > 255, "payload must exceed the filename limit to be a regression test"
+        assert len(load_rules(payload)) == len(PHRASE_RULES)
+        assert check_claim_rules("world class", payload)
+
+    def test_a_path_that_is_not_readable_is_not_reinterpreted_as_json(self):
+        """A caller passing Path("missing.json") made a mistake; silently treating the filename as
+        JSON text would bury it."""
+        from pathlib import Path as P
+        assert load_rules(P("definitely-not-here.json")) == ()
+
+    @pytest.mark.parametrize("junk", [None, 42, {}, "", [], "not json at all"])
     def test_unusable_sources_yield_no_rules_rather_than_raising(self, junk):
         assert check_claim_rules("world class", junk) == []
 
