@@ -4,7 +4,7 @@ from __future__ import annotations
 from veritas_gate import TruthChecker
 
 EVIDENCE = (
-    "Built a retrieval-augmented generation system over a 100,000+ document corpus that cut "
+    "Built a retrieval-augmented generation system over a 35,000+ document corpus that cut "
     "research time 85%. Stood up local model serving with llama.cpp. Wrote 445 automated tests."
 )
 
@@ -22,7 +22,7 @@ def _highs(draft: str) -> list:
 
 
 def test_honest_evidence_backed_claim_passes() -> None:
-    assert _gate().check("Built a RAG pipeline over a 100,000+ document corpus.").is_valid
+    assert _gate().check("Built a RAG pipeline over a 35,000+ document corpus.").is_valid
 
 
 def test_not_claimable_skill_is_blocked() -> None:
@@ -61,3 +61,21 @@ def test_attribution_fires_when_markers_configured() -> None:
     res = gate.check(draft)
     assert any(v.violation_type == "misattribution" and v.severity == "high"
                for v in res.violations)
+
+
+def test_the_demo_corpus_figure_matches_the_real_one() -> None:
+    """The published README and demo advertised a corpus an order of magnitude larger than the real
+    one. The true figure is 35,000+ indexed documents. That inconsistency sat in a public repository
+    whose whole purpose is catching exactly this class of claim, and it contradicted the author's own
+    resume. Pinned so it cannot come back.
+
+    The forbidden literal is assembled at runtime so this file can scan itself without matching."""
+    from pathlib import Path
+    forbidden = ("100" + ",000", "100" + "000")
+    root = Path(__file__).resolve().parent.parent
+    for rel in ("README.md", "src/veritas_gate/example.py", "src/veritas_gate/checker.py",
+                "src/veritas_gate/rubric.py", "src/veritas_gate/aliases.py",
+                "tests/test_checker.py", "tests/test_rubric.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        for bad in forbidden:
+            assert bad not in text, f"{rel} still advertises a {bad}-document corpus"
