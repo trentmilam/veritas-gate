@@ -114,6 +114,70 @@ structure.
 **`is_degenerate`** — catches repetition-runaway output (collapsed vocabulary, or a long run of
 comma-items sharing a leading word) that passes both the honesty checks and any length floor.
 
+**`check_claim_rules`** — a declarative registry where one row is both the rule the gate enforces
+and the instruction the prompt renders, so the two cannot drift apart. See below.
+
+## The claim registry, and where declarative rules stop working
+
+When a pipeline keeps producing the same class of wrong claim, the usual fix is another hand-written
+detector. Do that seventeen times and each nuance lives in two places that drift: the prompt re-types
+the fact as an instruction, the checker encodes it as a regex. A policy written in a spec file
+reaches the model immediately, because the model reads prose — and stays invisible to the gate until
+it leaks into production and someone writes another regex.
+
+```python
+from veritas_gate import check_claim_rules, prompt_rules_block
+
+rules = [{
+    "id": "initiative-attribution",
+    "violation_type": "attribution_error",
+    "severity": "high",
+    "prompt_instruction": "The retrieval platform was self-initiated; the migration was assigned.",
+    "subjects": {
+        "self_initiated": {"any_of": ["retrieval platform"]},
+        "assigned_work":  {"any_of": ["migration workstream"]},
+    },
+    "forbid": [{
+        "subject": "self_initiated",
+        "within_sentence": ["was assigned", "tasked with"],
+        "message": "the retrieval platform was self-initiated, not assigned",
+    }],
+}]
+
+# TRUE sentence covering both subjects -> passes
+check_claim_rules("I initiated the retrieval platform and was assigned to the migration "
+                  "workstream.", rules)                                          # []
+# the term attached to the wrong subject -> fires
+check_claim_rules("I was assigned to the retrieval platform.", rules)            # 1 finding
+
+prompt_rules_block(rules)   # the same row, rendered for the system prompt
+```
+
+**Nearest-marker attribution** is the mechanism worth stealing. One real sentence often covers
+several subjects legitimately, so banning a term whenever the sentence *mentions* a subject would
+flag correct writing. Co-occurrence is the wrong test; ownership is the right one. Each forbidden
+term attaches to whichever subject's marker sits nearest it.
+
+**Now the part most rules engines leave out.** The original goal was to retire every hand-written
+detector into rows here. That was tried, measured against 9,963 real generated documents (36.7M
+characters), and **rejected**. Rules here match literal lower-cased substrings with no word
+boundaries, and at scale that is not a subtle problem:
+
+| what happened | measured |
+|---|---|
+| a two-character term (`rl`) as a registry row vs. the equivalent regex | fired on **3,410 of 9,963 documents** vs **107** — a 31.9× blast radius, 3,328 pure false positives, because `rl` sits inside *world, girl, early, hourly, quarterly* |
+| `done`, `grow`, `initial` as rows | match inside *abandoned, condone, undone*; *outgrew*; *uninitialized* |
+| a single-word company-name ban | matched a different real company containing it as a substring |
+| translating one numeric check into rows | **112 false negatives** on the exact incident class that check existed to catch |
+
+So a rule belongs in the registry when its terms are multi-word and cannot occur inside a larger
+word. A rule belongs in code when it needs word boundaries, cross-sentence state, occurrence
+counting, open-ended numeric comparison, negative lookbehind, or the surrounding document. Adding a
+boundary-sensitive rule to a registry like this does not make the gate stricter — it makes it wrong
+in both directions at once, over-firing on substrings while under-firing on the real pattern.
+
+That boundary is not a limitation to fix later. It is the finding.
+
 ## Design notes
 
 - **Blocklist → allowlist tradeoff.** Skill claims are gated by a not-claimable blocklist with an
