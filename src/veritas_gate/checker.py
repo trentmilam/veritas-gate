@@ -204,7 +204,7 @@ def _impact_metrics(text: str) -> list:
 
 
 # TC-6 (counts): a draft can state a fabricated/stale plain COUNT ("23,000+ postings",
-# "250+ automated tests", "100,000 documents") that the %/$/multiplier impact gate never sees —
+# "250+ automated tests", "35,000 documents") that the %/$/multiplier impact gate never sees —
 # so "Valid: Yes, 0 violations" while a number is wrong. These count-nouns mark a number as a
 # significant magnitude claim that MUST trace to the evidence.
 _COUNT_NOUNS = (
@@ -220,7 +220,7 @@ _COUNT_NOUNS = (
 )
 # A number (with optional thousands separators / decimal) followed by an optional +/k/K suffix and
 # then a count-noun, allowing up to two intervening modifier words ("250+ automated tests",
-# "100,000+ source documents") — e.g. "28,701 postings", "32k LOC". Conservative: requires the
+# "35,000+ source documents") — e.g. "28,701 postings", "32k LOC". Conservative: requires the
 # count-noun, so years/phone numbers/bare integers are not matched. The modifier run is
 # letter-only (no digits) so it can't swallow a second number.
 _COUNT_RE = re.compile(
@@ -574,7 +574,7 @@ class TruthChecker:
                                "remove it before sending.",
                 )
 
-        # TC-6: surface a significant plain COUNT ("23,000+ postings", "250+ tests", "100,000
+        # TC-6: surface a significant plain COUNT ("23,000+ postings", "250+ tests", "35,000
         # documents") whose numeric core isn't in the evidence figure index — the class of overclaim
         # the %/$/multiplier gate never sees. NON-blocking (medium): a fabricated/stale count is
         # caught in the cockpit's truth warnings before sending, without hard-failing a truthful draft.

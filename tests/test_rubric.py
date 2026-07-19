@@ -9,7 +9,7 @@ CLEAN = (
     "Alex Doe\nForward Deployed AI Engineer\n\n"
     "Summary\nApplied AI engineer.\n"
     "Experience\n"
-    "- Cut research time 85% over a 100,000-document corpus\n"
+    "- Cut research time 85% over a 35,000-document corpus\n"
     "- Served 5M inference requests/day on a Docker deployment\n"
     "Skills\npython, rag, llm, inference, docker\nEducation\nBS"
 )

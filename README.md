@@ -15,12 +15,12 @@ check — and as a reference for how to do **evals engineering** without an LLM 
 from veritas_gate import TruthChecker, rubric_score, is_degenerate
 
 gate = TruthChecker(
-    experience_evidence="Built a RAG system over a 100,000+ doc corpus that cut research time 85%.",
+    experience_evidence="Built a RAG system over a 35,000+ doc corpus that cut research time 85%.",
     forbidden_skills=["kubernetes", "lora", "fine-tuning"],   # things the subject has NOT done
     forbidden_claims="cloud-native\nfull-stack",
 )
 
-gate.check("Built a RAG pipeline over a 100,000+ document corpus.").is_valid        # True
+gate.check("Built a RAG pipeline over a 35,000+ document corpus.").is_valid        # True
 gate.check("Expert in Kubernetes and LoRA fine-tuning.").is_valid                   # False (fabrication)
 gate.check("I have no experience with Kubernetes.").is_valid                        # True (honest omission)
 

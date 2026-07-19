@@ -9,7 +9,7 @@ from . import TruthChecker, is_degenerate, rubric_score
 
 # A fake "candidate" evidence bank — what the subject can genuinely back.
 EVIDENCE = (
-    "Built a retrieval-augmented generation system over a 100,000+ document corpus that cut "
+    "Built a retrieval-augmented generation system over a 35,000+ document corpus that cut "
     "research time 85%. Stood up local model serving with llama.cpp and an OpenAI-compatible "
     "gateway. Wrote 445 automated tests."
 )
@@ -20,7 +20,7 @@ KEYWORDS = frozenset({"python", "rag", "llm", "inference", "docker", "llama.cpp"
 HONEST = (
     "Alex Doe\nForward Deployed AI Engineer\n\n"
     "Summary\nApplied AI engineer who ships tested, reliable systems.\n"
-    "Experience\n- Cut research time 85% over a 100,000-document RAG corpus\n"
+    "Experience\n- Cut research time 85% over a 35,000-document RAG corpus\n"
     "- Stood up local LLM serving with llama.cpp behind an OpenAI-compatible gateway\n"
     "Skills\npython, rag, llm, inference, docker\nEducation\nBS"
 )
