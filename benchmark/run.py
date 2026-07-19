@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter, defaultdict
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -106,12 +106,19 @@ def main() -> int:
         return 2
 
     rows = []
+    check_seconds = 0.0      # gate.check() alone: the steady-state cost per text
+    full_seconds = 0.0       # + evidence serialization and checker construction: cold cost per pair
     for r in test:
         src = sources.get(r["source_id"])
         if not src:
             continue
+        t_cold = time.perf_counter()
         gate = TruthChecker(experience_evidence=evidence_for(src))
+        t0 = time.perf_counter()
         result = gate.check(r["response"])
+        t1 = time.perf_counter()
+        check_seconds += t1 - t0
+        full_seconds += t1 - t_cold
         fired = [v for v in result.violations if v.violation_type in GENERIC_VIOLATIONS]
         rows.append({
             "cluster": r["source_id"],
@@ -166,6 +173,13 @@ def main() -> int:
                            ("SelfCheckGPT GPT-3.5", 49.7, 71.9, 58.8),
                            ("Finetuned Llama-2-13B", 76.9, 80.7, 78.7)):
         print(f"  {name:22} P {p:5.1f}  R {r_:5.1f}  F1 {f:5.1f}")
+    print()
+    print("LATENCY (measured, this machine -- deliberately NOT written to results.json, which must"
+          " stay byte-identical across runs)")
+    print(f"  gate.check() only : {check_seconds * 1000 / n:.3f} ms/response  (steady state: one "
+          f"checker reused across texts)")
+    print(f"  + build & serialize: {full_seconds * 1000 / n:.3f} ms/response  (cold: a fresh "
+          f"checker and evidence bank per response -- what this harness actually does)")
     print()
     print("BY TASK TYPE (measured)")
     for task in sorted({x["task"] for x in rows}):
