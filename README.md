@@ -2,6 +2,9 @@
 
 **A deterministic, domain-configured gate for LLM-generated text, and an honest measurement of how far that gets you.**
 
+> Plain-language writeup of the negative result and why it shipped anyway:
+> [trentmilam.dev/work/veritas-gate](https://trentmilam.dev/work/veritas-gate/)
+
 ![ci](https://github.com/trentmilam/veritas-gate/actions/workflows/ci.yml/badge.svg)
 
 `veritas-gate` is a small, zero-dependency library that gates LLM output with deterministic rules
