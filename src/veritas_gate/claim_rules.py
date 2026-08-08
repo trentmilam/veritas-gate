@@ -10,10 +10,16 @@ someone writes another regex. A declarative registry closes that gap: one row is
 gate enforces and the instruction the model reads.
 
 THE INTERESTING PART IS WHERE THIS STOPS WORKING
-This module deliberately does NOT try to express every rule declaratively, because that was tried,
-measured, and rejected. The full migration was tested against 9,963 real generated documents
-(36.7M characters). Rules here match literal, lower-cased substrings with no word boundaries, and
-at that scale the consequences are not subtle:
+This module deliberately does NOT try to express every rule declaratively, because that was tried
+and rejected. Rules here match literal, lower-cased substrings with no word boundaries, and at
+scale that produces both false positives (a short term sits inside a longer, unrelated word) and
+false negatives (a rule translated out of code loses the boundary/context logic that made the
+original check correct).
+
+CITED FINDING, NOT REPRODUCIBLE FROM THIS REPO
+In 2026 the full migration was measured against 9,963 real generated documents (36.7M characters)
+from a private corpus of real personal application data -- never vendored here, and this number
+cannot be reproduced from anything in this repository:
 
   * A two-character term from a real capability check -- ``rl`` -- fired on 3,410 of 9,963
     documents where the equivalent regex fired on 107. A 31.9x blast radius, 3,328 of them pure
@@ -24,6 +30,16 @@ at that scale the consequences are not subtle:
     substring.
   * Translating one numeric check into rows produced 112 FALSE NEGATIVES on the exact incident
     class that check existed to catch.
+
+WHAT IS REPRODUCIBLE: THE MECHANISM, NOT THAT NUMBER
+Bare-substring-vs-word-boundary blast radius is a property of English text in general, not of that
+one private corpus. ``benchmark/registry_blast_radius.py`` demonstrates it on the same public,
+pinned RAGTruth corpus the rest of ``benchmark/`` uses -- no private data, runnable by anyone who
+clones this repo. Measured there: ``rl`` never occurs as its own word in RAGTruth's test split (0
+word-boundary matches) yet fires on 598 of 2,700 documents as a bare substring -- 100% false
+positives from words like airline, clearly, early, girl, world. Different number from the private
+finding (different corpus, different domain -- "rl" has zero legitimate technical-writing uses in
+RAGTruth's news/QA/data-record text), same mechanism.
 
 So: a rule belongs here when its terms are multi-word and cannot occur inside a larger word.
 A rule belongs in code when it needs word boundaries, cross-sentence state, occurrence counting,

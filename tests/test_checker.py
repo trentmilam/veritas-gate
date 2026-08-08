@@ -63,6 +63,40 @@ def test_attribution_fires_when_markers_configured() -> None:
                for v in res.violations)
 
 
+PHRASE_RULES = [{
+    "id": "banned-phrases",
+    "violation_type": "overclaim",
+    "severity": "high",
+    "forbid": [{
+        "phrases": ["industry leading", "world class"],
+        "message": "unsupportable superlative",
+        "suggestion": "state the specific, evidenced claim instead",
+    }],
+}]
+
+
+class TestClaimRulesWiring:
+    """The declarative registry (claim_rules.py) is inert unless a caller passes claim_rules= --
+    this is the integration point, not claim_rules.py's own contract tests (test_claim_rules.py)."""
+
+    def test_inert_when_no_rules_configured(self) -> None:
+        result = _gate().check("This is industry leading work.")
+        assert not any(v.violation_type == "overclaim" for v in result.violations)
+
+    def test_fires_when_rules_are_configured(self) -> None:
+        gate = TruthChecker(experience_evidence=EVIDENCE, claim_rules=PHRASE_RULES)
+        result = gate.check("This is industry leading work.")
+        hit = next(v for v in result.violations if v.violation_type == "overclaim")
+        assert hit.severity == "high"
+        assert hit.suggestion == "state the specific, evidenced claim instead"
+
+    def test_accepts_a_json_string_not_only_a_parsed_list(self) -> None:
+        import json
+        gate = TruthChecker(experience_evidence=EVIDENCE, claim_rules=json.dumps(PHRASE_RULES))
+        result = gate.check("Our platform is world class.")
+        assert any(v.violation_type == "overclaim" for v in result.violations)
+
+
 def test_the_demo_corpus_figure_matches_the_real_one() -> None:
     """The published README and demo advertised a corpus an order of magnitude larger than the real
     one. The true figure is 35,000+ indexed documents. That inconsistency sat in a public repository

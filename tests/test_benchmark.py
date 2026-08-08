@@ -338,6 +338,45 @@ class TestGroundingNumbersMatchTheResultsFile:
             "rewrite, not just new numbers")
 
 
+class TestRegistryBlastRadius:
+    """registry_blast_radius.py -- the reproducible public replacement for the unreproducible
+    private 9,963-document claim (see claim_rules.py / README's claim-registry section)."""
+
+    def test_a_term_that_never_stands_alone_has_zero_true_positives(self):
+        import registry_blast_radius as rbr
+        texts = ["The world is round.", "A girl walked early.", "Nothing hourly happens here."]
+        out = rbr.blast_radius(texts, "rl")
+        assert out["substring_matched_documents"] == 3
+        assert out["word_boundary_matched_documents"] == 0
+        assert "world" in out["example_containing_words"]
+        assert "girl" in out["example_containing_words"]
+
+    def test_a_real_standalone_word_is_not_penalized_by_the_boundary_match(self):
+        import registry_blast_radius as rbr
+        texts = ["The RL agent converged.", "Unrelated text with no match."]
+        out = rbr.blast_radius(texts, "RL")
+        assert out["word_boundary_matched_documents"] == 1
+        assert out["substring_matched_documents"] == 1
+        assert out["blast_radius_ratio"] == pytest.approx(1.0)
+
+    def test_private_mode_refuses_to_scan_this_repository(self):
+        import registry_blast_radius as rbr
+        with pytest.raises(SystemExit):
+            rbr._private_mode(ROOT, "rl")
+
+    def test_committed_result_matches_the_readme_figure(self):
+        """The README cites a specific measured count from a committed public-mode run (like
+        results.json) -- no live corpus fetch needed here, matching every other drift-guard test."""
+        import registry_blast_radius as rbr
+        if not rbr.RESULT_PATH.exists():
+            pytest.fail("benchmark/registry_blast_radius.json is committed alongside the README; "
+                        "regenerate with `python benchmark/registry_blast_radius.py`")
+        out = json.loads(rbr.RESULT_PATH.read_text(encoding="utf-8"))
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        assert str(out["substring_matched_documents"]) in readme
+        assert out["term"] in readme
+
+
 class TestMetrics:
     def test_wilson_stays_inside_the_unit_interval_at_the_extremes(self):
         """The Wald interval fails exactly here; this is the reason Wilson was chosen."""

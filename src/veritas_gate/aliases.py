@@ -23,14 +23,11 @@ precise, auditable core.
 
 Public API:
     ``term_in(term, text) -> bool``        — is term (or any alias) present, boundary-safe?
-    ``present_terms(terms, text) -> list`` — which of ``terms`` are present (order preserved)
     ``surface_forms(term) -> tuple``       — the full alias family for term (incl. itself)
-    ``canonical_terms(text) -> set``       — the alias-table canonicals present in text
 """
 from __future__ import annotations
 
 import re
-from typing import Iterable
 
 # Each tuple is one equivalence family; the FIRST entry is the canonical label. Every form
 # is matched on word boundaries, so the short ones are safe. Keep this conservative and
@@ -129,17 +126,3 @@ def term_in(term: str, text: str) -> bool:
     return pat is not None and pat.search(low) is not None
 
 
-def present_terms(terms: Iterable[str], text: str) -> list[str]:
-    """The subset of ``terms`` present in ``text`` (input order preserved)."""
-    if not text:
-        return []
-    return [t for t in terms if term_in(t, text)]
-
-
-def canonical_terms(text: str) -> set[str]:
-    """The alias-table canonicals present in ``text`` (e.g. a JD saying "k8s" yields
-    ``{"kubernetes"}``). For matching against an arbitrary vocabulary use
-    :func:`present_terms`."""
-    if not text:
-        return set()
-    return {canon for canon in _FAMILY if term_in(canon, text)}

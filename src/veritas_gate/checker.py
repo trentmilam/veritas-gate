@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
+from .claim_rules import check_claim_rules, load_rules
 from .grounding import broadened_numeric_ungrounded, novel_content_windows, ungrounded_entities
 
 # Professional credentials the checker flags when asserted-but-unevidenced. The index builder and
@@ -76,17 +77,6 @@ def _digits_in(text: str) -> set:
     """All numeric tokens in ``text`` (comma/space-stripped digit runs) — for matching the
     impact metrics in a draft against the figures that actually appear in the evidence."""
     return {re.sub(r"[,\s]", "", t) for t in re.findall(r"\d[\d.,]*", text or "")}
-
-
-def _credentials_in(text: str) -> set:
-    """Core credential tokens present in ``text`` — by abbreviation OR spelled-out full name.
-    Shared by the evidence-index builder and the draft checker so both recognize the same set."""
-    found = {m.lower() for m in re.findall(rf"\b({_CREDENTIAL_TOKENS})\b", text or "", re.IGNORECASE)}
-    low = (text or "").lower()
-    for core, full in _CREDENTIAL_FULL.items():
-        if full in low:
-            found.add(core)
-    return found
 
 
 _CLAUSE_SPLIT = re.compile(r"[.;\n!?]")
@@ -391,6 +381,7 @@ class TruthChecker:
         enable_broadened_numeric: bool = False,
         enable_entity_grounding: bool = False,
         enable_novelty_check: bool = False,
+        claim_rules: Optional[Any] = None,
     ) -> None:
         self.candidate_profile = candidate_profile
         self.experience_evidence = experience_evidence
@@ -406,6 +397,11 @@ class TruthChecker:
         self._enable_broadened_numeric = enable_broadened_numeric
         self._enable_entity_grounding = enable_entity_grounding
         self._enable_novelty_check = enable_novelty_check
+        # The declarative claim registry (claim_rules.py) -- nearest-marker attribution and
+        # closed-phrase bans a caller defines as data, not code. A path, a JSON string, or an
+        # already-parsed list; load_rules() accepts all three. Default None -> inert, matching
+        # every other caller-configured gate here.
+        self._claim_rules = load_rules(claim_rules) if claim_rules else ()
 
         # Whitespace- AND hyphen-normalized so a re-spaced ('active   secret clearance') or
         # re-hyphenated ('cloud native' vs 'cloud-native') forbidden phrase can't bypass the
@@ -631,28 +627,17 @@ class TruthChecker:
                                "this passage is grounded before sending.",
                 )
 
+        # The declarative claim registry (claim_rules.py): closed-phrase bans and nearest-marker
+        # attribution rules a caller supplied as data. Inert when none were configured.
+        for finding in check_claim_rules(draft_text, self._claim_rules):
+            result.add_violation(
+                claim=finding.claim,
+                violation_type=finding.violation_type,
+                severity=finding.severity,
+                suggestion=finding.suggestion or finding.message,
+            )
+
         result.generate_summary()
         return result
 
 
-def build_truth_checker_from_paths(
-    profile_path: str = "",
-    evidence_path: str = "",
-    resume_blocks_path: str = "",
-    forbidden_claims_path: str = "",
-) -> TruthChecker:
-    def _read(path: str) -> str:
-        if not path:
-            return ""
-        try:
-            with open(path, "r") as f:
-                return f.read()
-        except FileNotFoundError:
-            return ""
-
-    return TruthChecker(
-        candidate_profile=_read(profile_path),
-        experience_evidence=_read(evidence_path),
-        resume_blocks=_read(resume_blocks_path),
-        forbidden_claims=_read(forbidden_claims_path),
-    )

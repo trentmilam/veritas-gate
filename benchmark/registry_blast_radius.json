@@ -1,0 +1,29 @@
+{
+ "blast_radius_ratio": 0.0,
+ "example_containing_words": [
+  "airline",
+  "airlines",
+  "beverly",
+  "clearly",
+  "disorderly",
+  "earley",
+  "earlier",
+  "early",
+  "elderly",
+  "girl",
+  "girls",
+  "nearly",
+  "orlando",
+  "overlapping",
+  "overlooked",
+  "overly",
+  "particularly",
+  "properly",
+  "tamerlan",
+  "world"
+ ],
+ "n_documents": 2700,
+ "substring_matched_documents": 598,
+ "term": "rl",
+ "word_boundary_matched_documents": 0
+}

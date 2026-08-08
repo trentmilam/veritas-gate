@@ -161,6 +161,10 @@ pre-filter to route to a human or a judge model, not as a standalone gate.
 - **Misattribution** (optional) — flags a personal-project signature under an employer block;
   config-driven, inert unless you supply the markers.
 - **Credentials and named entities** — asserted but not evidenced, flagged.
+- **Grounding checks** (optional, see above) — broadened numeric, ungrounded entity, and
+  content-word novelty; measured DOES_NOT_WORK standalone, opt-in for a reason.
+- **Claim registry** (optional) — pass `claim_rules=[...]` and every row's rule is enforced at
+  check time; see below.
 
 Note what this list is not: it does not parse arbitrary prose into claims and verify each one. It
 enforces the constraints you configure. The benchmark exists because that distinction matters and is
@@ -174,7 +178,8 @@ structure.
 comma-items sharing a leading word) that passes both the honesty checks and any length floor.
 
 **`check_claim_rules`** — a declarative registry where one row is both the rule the gate enforces
-and the instruction the prompt renders, so the two cannot drift apart. See below.
+and the instruction the prompt renders, so the two cannot drift apart. Callable standalone, or
+passed straight to `TruthChecker(claim_rules=[...])` so it runs as part of `check()`. See below.
 
 ## The claim registry, and where declarative rules stop working
 
@@ -218,16 +223,42 @@ flag correct writing. Co-occurrence is the wrong test; ownership is the right on
 term attaches to whichever subject's marker sits nearest it.
 
 **Now the part most rules engines leave out.** The original goal was to retire every hand-written
-detector into rows here. That was tried, measured against 9,963 real generated documents (36.7M
-characters), and **rejected**. Rules here match literal lower-cased substrings with no word
-boundaries, and at scale that is not a subtle problem:
+detector into rows here. That was tried and rejected. Rules here match literal lower-cased
+substrings with no word boundaries, and at scale that is not a subtle problem — it produces both
+false positives (a short term sits inside a longer, unrelated word) and false negatives (a rule
+translated out of code loses the word-boundary/context logic that made the original check correct).
 
-| what happened | measured |
-|---|---|
-| a two-character term (`rl`) as a registry row vs. the equivalent regex | fired on **3,410 of 9,963 documents** vs **107** — a 31.9× blast radius, 3,328 pure false positives, because `rl` sits inside *world, girl, early, hourly, quarterly* |
-| `done`, `grow`, `initial` as rows | match inside *abandoned, condone, undone*; *outgrew*; *uninitialized* |
-| a single-word company-name ban | matched a different real company containing it as a substring |
-| translating one numeric check into rows | **112 false negatives** on the exact incident class that check existed to catch |
+**The cited finding, plainly labeled as such.** In 2026, a prior version of this same substring-rule
+approach was measured against 9,963 real generated documents (36.7M characters) from a private
+corpus of real personal application data — never vendored into this public repo, and not
+reproducible from anything here. That run found a two-character term (`rl`) fired on 3,410 of 9,963
+documents as a registry row versus 107 for the equivalent word-boundary regex (a 31.9× blast
+radius); `done`/`grow`/`initial` matched inside *abandoned*/*outgrew*/*uninitialized*; a
+single-word company-name ban matched an unrelated company containing it as a substring; and
+translating one numeric check into rows produced 112 false negatives on the incident class it
+existed to catch. Cited, dated, and **not verifiable by a reader of this repository** — the corpus
+it ran against will never be published.
+
+**What a reader CAN verify: the mechanism, not that specific number.** Bare-substring-vs-no-digit
+matching failure is a property of English text in general, not of that one private corpus.
+`benchmark/registry_blast_radius.py` demonstrates it on the same public, pinned RAGTruth corpus this
+whole benchmark uses:
+
+```bash
+python benchmark/fetch_data.py                # once
+python benchmark/registry_blast_radius.py      # public mode, writes registry_blast_radius.json
+```
+
+**Measured** on RAGTruth's 2,700-response test split: `rl` never occurs as its own word (0
+word-boundary matches) yet a bare-substring rule would still fire on **598 of 2,700 documents** —
+100% false positives, purely from words like *airline, beverly, clearly, disorderly, earlier, girl,
+nearly, orlando, world*. Not the same number as the private-corpus finding (different corpus,
+different domain, and `rl` happens to have zero legitimate uses in RAGTruth's news/QA/data-record
+text where the private corpus's technical writing had 107) — but the same mechanism, reproducible by
+anyone who clones this repo, with no private data involved.
+
+A `--root <path>` private mode exists for running the same check against your own local documents;
+it is never the default, and prints only aggregate counts — never document text, never file paths.
 
 So a rule belongs in the registry when its terms are multi-word and cannot occur inside a larger
 word. A rule belongs in code when it needs word boundaries, cross-sentence state, occurrence

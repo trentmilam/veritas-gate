@@ -35,7 +35,6 @@ def _candidate_keywords() -> frozenset:
     return frozenset()
 
 _STD_HEADERS = ("summary", "experience", "skills", "education")
-_DIGIT_RE = re.compile(r"\d")
 _BULLET_RE = re.compile(r"^\s*[-*•]\s+")
 # Gap-vocab entries that are REQUIREMENTS / anti-signals, not skills to MIRROR. Keeping them in the
 # coverage pool let a résumé earn keyword credit for echoing "PhD" / "on-call" / "5+ years" — worse
@@ -109,28 +108,6 @@ def _experience_bullets(resume_text: str) -> list[str]:
     end = next((j for j in range(start, len(lines))
                 if any(_is_header(lines[j], h) for h in others)), len(lines))
     return [ln for ln in lines[start:end] if _BULLET_RE.match(ln)]
-
-
-def leads_with_metric_pct(resume_text: str) -> int:
-    """ADVISORY (non-blocking): the fraction of EXPERIENCE bullets that OPEN with a number, as a
-    0-100 percent. A signal for the research lever "lead the bullet with the evidenced production
-    metric where one genuinely exists" — high when strong bullets front-load their real figure.
-
-    Pure measurement, never a gate: it reports what the draft does and CANNOT (and must not) cause
-    a number to be invented — the anti-fabrication gate stays the truth_checker. Reuses
-    ``_experience_bullets`` + ``_DIGIT_RE`` so it agrees with :func:`ats_rubric_score`'s
-    quantified ratio (which counts a digit ANYWHERE in the bullet; this one only counts a digit in
-    the LEADING token — i.e. the bullet actually starts with the number)."""
-    bullets = _experience_bullets(resume_text or "")
-    if not bullets:
-        return 0
-    leads = 0
-    for b in bullets:
-        body = _BULLET_RE.sub("", b).strip()      # strip the "- "/"* "/"• " marker
-        head = body.split(maxsplit=1)[0] if body else ""
-        if _DIGIT_RE.search(head):
-            leads += 1
-    return round(100 * leads / len(bullets))
 
 
 def ats_rubric_score(
