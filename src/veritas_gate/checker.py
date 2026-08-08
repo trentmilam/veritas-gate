@@ -629,11 +629,16 @@ class TruthChecker:
 
         # The declarative claim registry (claim_rules.py): closed-phrase bans and nearest-marker
         # attribution rules a caller supplied as data. Inert when none were configured.
+        # severity is caller-authored JSON/data and claim_rules.py does not normalize its case --
+        # add_violation()/generate_summary() compare severity by EXACT string ("high"/"medium"/
+        # "low"), so a rule authored as "High" would silently never set is_valid=False and vanish
+        # from the summary buckets. Lower-case it at the point it enters this gate's own severity
+        # vocabulary, not upstream in claim_rules.py, which has no opinion on this gate's contract.
         for finding in check_claim_rules(draft_text, self._claim_rules):
             result.add_violation(
                 claim=finding.claim,
                 violation_type=finding.violation_type,
-                severity=finding.severity,
+                severity=finding.severity.lower(),
                 suggestion=finding.suggestion or finding.message,
             )
 

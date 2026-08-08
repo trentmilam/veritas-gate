@@ -96,6 +96,19 @@ class TestClaimRulesWiring:
         result = gate.check("Our platform is world class.")
         assert any(v.violation_type == "overclaim" for v in result.violations)
 
+    def test_a_capitalized_high_severity_still_blocks(self) -> None:
+        # claim_rules.py never normalizes a caller-authored severity string's case. A rule written
+        # as "High" (a natural JSON-authoring variant) must still gate exactly like "high" -- not
+        # silently pass through add_violation()'s/generate_summary()'s exact-string comparisons.
+        rules = [{
+            "id": "capitalized-severity", "violation_type": "overclaim", "severity": "High",
+            "forbid": [{"phrases": ["industry leading"], "message": "unsupportable superlative"}],
+        }]
+        gate = TruthChecker(experience_evidence=EVIDENCE, claim_rules=rules)
+        result = gate.check("This is industry leading work.")
+        assert result.is_valid is False
+        assert any(v.violation_type == "overclaim" for v in result.violations)
+
 
 def test_the_demo_corpus_figure_matches_the_real_one() -> None:
     """The published README and demo advertised a corpus an order of magnitude larger than the real

@@ -364,6 +364,24 @@ class TestRegistryBlastRadius:
         with pytest.raises(SystemExit):
             rbr._private_mode(ROOT, "rl")
 
+    def test_private_mode_refuses_an_ancestor_of_this_repository_too(self):
+        """A --root above the repo would walk INTO it via rglob just as surely as --root AT it --
+        the guard has to block both directions, not just root-inside-repo."""
+        import registry_blast_radius as rbr
+        with pytest.raises(SystemExit):
+            rbr._private_mode(ROOT.parent, "rl")
+
+    def test_private_mode_never_returns_extracted_document_words(self, tmp_path):
+        """AGGREGATE COUNTS ONLY is this mode's whole reason to exist -- example_containing_words
+        carries literal words pulled from the caller's private files and must never survive into
+        the returned dict, which is what both main()'s print and any programmatic caller see."""
+        import registry_blast_radius as rbr
+        (tmp_path / "secret.txt").write_text("a girl in the world said hourly things",
+                                             encoding="utf-8")
+        out = rbr._private_mode(tmp_path, "rl")
+        assert out["substring_matched_documents"] == 1
+        assert out["example_containing_words"] is None
+
     def test_committed_result_matches_the_readme_figure(self):
         """The README cites a specific measured count from a committed public-mode run (like
         results.json) -- no live corpus fetch needed here, matching every other drift-guard test."""

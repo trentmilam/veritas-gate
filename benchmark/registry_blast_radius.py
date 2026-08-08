@@ -87,8 +87,12 @@ def _public_mode() -> dict:
 
 def _private_mode(root: Path, term: str) -> dict:
     resolved = root.resolve()
-    if resolved == REPO_ROOT or REPO_ROOT in resolved.parents:
-        print(f"BLOCKED: --root must not point inside this repository ({REPO_ROOT}).")
+    # Block in BOTH directions: --root inside/equal to the repo, and --root an ANCESTOR of the repo
+    # (which would walk straight into it via rglob) -- checking only the first direction lets
+    # `--root <parent-of-this-repo>` sail through and scan this repo's own tree anyway.
+    if (resolved == REPO_ROOT or REPO_ROOT in resolved.parents
+            or resolved in REPO_ROOT.parents):
+        print(f"BLOCKED: --root must not point inside, at, or above this repository ({REPO_ROOT}).")
         raise SystemExit(2)
     texts = []
     for path in root.rglob("*"):
@@ -97,7 +101,13 @@ def _private_mode(root: Path, term: str) -> dict:
                 texts.append(path.read_text(encoding="utf-8", errors="ignore"))
             except OSError:
                 continue
-    return blast_radius(texts, term)
+    out = blast_radius(texts, term)
+    # AGGREGATE COUNTS ONLY, per this module's own privacy guarantee: strip any field that carries
+    # words/text extracted verbatim from the caller's private files before it ever leaves this
+    # function -- returned to a caller AND printed by main(), so redacting only at print time would
+    # still leak through the return value.
+    out["example_containing_words"] = None
+    return out
 
 
 def _parse_args(argv: "list[str] | None") -> argparse.Namespace:
@@ -128,17 +138,19 @@ def main(argv: "list[str] | None" = None) -> int:
 
     print(json.dumps(out, indent=1))
     print()
+    # example_containing_words is redacted (None) in private mode -- see _private_mode's own
+    # AGGREGATE-COUNTS-ONLY comment. Never format it into the summary in that case.
+    words = out["example_containing_words"]
+    examples = f", purely from words like: {', '.join(words[:8])}" if words else ""
     if out["word_boundary_matched_documents"]:
         print(f"'{out['term']}' matched {out['substring_matched_documents']} documents as a bare "
               f"substring vs {out['word_boundary_matched_documents']} with a word boundary -- a "
-              f"{out['blast_radius_ratio']:.1f}x blast radius, purely from words like: "
-              f"{', '.join(out['example_containing_words'][:8])}.")
+              f"{out['blast_radius_ratio']:.1f}x blast radius{examples}.")
     elif out["substring_matched_documents"]:
         print(f"'{out['term']}' never occurs as its own word in this corpus (0 word-boundary "
               f"matches), yet a bare-substring registry rule would still fire on "
               f"{out['substring_matched_documents']} of {out['n_documents']} documents -- 100% "
-              f"false positives, purely from words like: "
-              f"{', '.join(out['example_containing_words'][:8])}.")
+              f"false positives{examples}.")
     else:
         print(f"'{out['term']}' does not occur in this corpus at all, substring or boundary.")
     return 0
