@@ -1,0 +1,44 @@
+name: benchmark-refresh
+
+# Re-runs the RAGTruth benchmark against the pinned, checksum-verified corpus and fails loudly if
+# the committed benchmark/results.json no longer matches what the current detector code produces.
+# Deliberately does NOT auto-commit a changed results.json -- a number moving means a human needs
+# to look at why and rewrite the surrounding README prose, not have a bot silently republish it.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[dev]"
+
+      - name: Fetch the pinned RAGTruth corpus (checksum-verified, aborts on mismatch)
+        run: python benchmark/fetch_data.py
+
+      - name: Re-run the disciplined benchmark against the test split
+        run: >
+          python benchmark/run.py --reason "scheduled benchmark-refresh (${{ github.event_name }})
+          -- verifying checker.py/aliases.py/claim_rules.py have not silently drifted from the
+          committed results.json"
+
+      - name: Fail loudly on any drift from the committed results.json
+        run: |
+          if ! git diff --exit-code -- benchmark/results.json; then
+            echo "::error::benchmark/results.json no longer matches what the current checker source produces."
+            echo "::error::A detection-code change shipped without a matching benchmark run + README update."
+            echo '::error::Re-run `python benchmark/run.py --reason "..."` locally, review the diff, and'
+            echo "::error::commit the new results.json (and any README numbers that changed) together with"
+            echo "::error::the code change that caused it."
+            exit 1
+          fi
+          echo "benchmark/results.json matches current checker source -- no drift."

@@ -1,0 +1,8 @@
+{
+ "digit_ceiling_ratio": 1.0,
+ "digit_spans_total": 194,
+ "fn": 129,
+ "fp": 32,
+ "n": 386,
+ "tp": 65
+}

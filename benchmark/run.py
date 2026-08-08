@@ -1,7 +1,16 @@
 """Measure veritas-gate against RAGTruth, in generic-only mode.
 
-    python benchmark/fetch_data.py     # once
-    python benchmark/run.py
+    python benchmark/fetch_data.py                        # once
+    python benchmark/run.py --reason "why this run happens"
+
+--reason is required and permanent: this scores the SACRED test split, and every run appends one
+line to the committed benchmark/TEST_SET_ACCESS_LOG.jsonl. Iterate freely against the train split
+instead with `python benchmark/dev_run.py` -- nothing there needs a reason, because nothing there is
+the number that gets published. See "TEST-SET ACCESS DISCIPLINE" below for why this exists.
+
+CI never runs this file with real data. It runs `python benchmark/run.py --fixture` against a small
+committed offline slice (see benchmark/fixtures/) so the harness LOGIC is checked on every push with
+no 36 MB download and no test-set access.
 
 WHAT THIS DOES AND DOES NOT MEASURE
 -----------------------------------
@@ -16,9 +25,9 @@ vocabulary and asks only "is this literal figure present in the supplied evidenc
     TC-3  unverified_metric   a %, $ or multiplier not found among the evidence figures
     TC-6  unverified_count    a count-noun-anchored magnitude not found among the evidence figures
 
-Those two, and only those two, are enabled. The checker is constructed with every domain parameter
-empty so the resume checks are inert, and predictions are additionally filtered to those two
-violation types so nothing else can leak into the score.
+Those two, and only those two, are enabled by default. The checker is constructed with every domain
+parameter empty so the resume checks are inert, and predictions are additionally filtered to those
+two violation types so nothing else can leak into the score.
 
 THE CEILING, STATED UP FRONT
 ----------------------------
@@ -34,23 +43,58 @@ TC-6's count-noun list ships UNMODIFIED. It is resume vocabulary (postings, test
 and will barely fire on news text. Extending it by reading RAGTruth would be inventing detector
 vocabulary from the evaluation corpus -- the exact in-sample tuning this benchmark exists to avoid.
 The near-zero fire rate is accepted as an honest cost.
+
+TEST-SET ACCESS DISCIPLINE
+---------------------------
+Nothing in a local script can PREVENT someone from re-running this against the test split until a
+number looks good. What it can do is make every access visible: a run against the real corpus
+requires `--reason "..."`, and that reason -- plus the sha256 of the detector source at the moment
+of the run -- is appended to benchmark/TEST_SET_ACCESS_LOG.jsonl, a file that is committed and never
+truncated. Six runs while tuning a threshold show up as six dated lines in a PR diff, not as
+something a reviewer has no way to see.
+
+The published benchmark/results.json also carries a `provenance.checker_sha256`: a CI test asserts
+that hash matches the CURRENT checker source, so a change to checker.py/aliases.py/claim_rules.py
+with a stale committed results.json now fails CI in the same PR, instead of silently drifting.
 """
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metrics import clustered_bootstrap_f1, pct, prf, wilson  # noqa: E402
+import fetch_data  # noqa: E402
+from metrics import clustered_bootstrap_f1, decision_verdict, pct, prf, wilson  # noqa: E402
 from veritas_gate import TruthChecker  # noqa: E402
 
-DATA = Path(__file__).resolve().parent / "data"
+HERE = Path(__file__).resolve().parent
+SRC = HERE.parent / "src" / "veritas_gate"
+DATA = HERE / "data"
+FIXTURES = HERE / "fixtures"
+RESULTS_PATH = HERE / "results.json"
+ACCESS_LOG = HERE / "TEST_SET_ACCESS_LOG.jsonl"
+
 GENERIC_VIOLATIONS = {"unverified_metric", "unverified_count"}
 MIN_SAMPLE = 200          # below this the run reports BLOCKED and no quality number
+
+# The exact files that constitute "the detector" for provenance purposes. Anything that changes what
+# gets scored belongs in this tuple -- if a new check is added to grounding.py and wired through
+# checker.py, add its module here too, or the content-hash gate stops meaning what it claims to.
+CHECKER_FILES = (SRC / "checker.py", SRC / "aliases.py", SRC / "claim_rules.py")
+
+
+def _file_hash(*paths: Path) -> str:
+    h = hashlib.sha256()
+    for p in sorted(paths):
+        h.update(p.read_bytes())
+    return h.hexdigest()
 
 
 def evidence_for(source_row: dict) -> str:
@@ -68,12 +112,13 @@ def evidence_for(source_row: dict) -> str:
 
 
 def digit_span_ceiling(responses: list) -> tuple[int, int]:
-    """(spans containing a digit, total annotated spans) across the whole corpus.
+    """(spans containing a digit, total annotated spans) across ``responses``.
 
-    This is the single most important number in the report. Both enabled checks are digit matchers,
-    so a hallucination span with no digit in it is invisible to them by construction -- this ratio
-    is the hard ceiling on recall, independent of implementation quality. It is computed here rather
-    than quoted from a one-off script so the documented command reproduces every published figure.
+    This is the single most important number in the report when only the two digit checks are
+    enabled. Both are digit matchers, so a hallucination span with no digit in it is invisible to
+    them by construction -- this ratio is the hard ceiling on recall, independent of implementation
+    quality. Computed here rather than quoted from a one-off script so the documented command
+    reproduces every published figure.
     """
     total = with_digit = 0
     for r in responses:
@@ -85,10 +130,19 @@ def digit_span_ceiling(responses: list) -> tuple[int, int]:
 
 
 def load() -> tuple[list, dict]:
+    """The real, pinned RAGTruth corpus. Re-verifies the checksum on EVERY call, not only at fetch
+    time -- a file swapped or corrupted after `fetch_data.py` succeeded once must still be caught
+    before it silently produces different numbers."""
     resp_path, src_path = DATA / "response.jsonl", DATA / "source_info.jsonl"
     if not resp_path.exists() or not src_path.exists():
         print("BLOCKED: corpus not present. Run `python benchmark/fetch_data.py` first.")
         raise SystemExit(2)
+    for name, path in (("response.jsonl", resp_path), ("source_info.jsonl", src_path)):
+        if not fetch_data.verify(name, path):
+            print(f"BLOCKED: {name} does not match the pinned checksum for commit "
+                  f"{fetch_data.CORPUS_COMMIT[:12]}. Refusing to score against a corpus that cannot "
+                  f"be verified. Re-run `python benchmark/fetch_data.py`.")
+            raise SystemExit(2)
     responses = [json.loads(l) for l in resp_path.open(encoding="utf-8")]
     sources = {}
     for line in src_path.open(encoding="utf-8"):
@@ -97,29 +151,53 @@ def load() -> tuple[list, dict]:
     return responses, sources
 
 
-def main() -> int:
-    responses, sources = load()
-    test = [r for r in responses if r.get("split") == "test"]
+def load_fixture() -> tuple[list, dict]:
+    """A small, committed, offline slice of the real test split -- see benchmark/fixtures/. No
+    network, no checksum against the pinned 36 MB corpus (different files entirely); regenerated
+    only by `benchmark/fixtures/build_fixture.py`, never by CI."""
+    responses = [json.loads(l) for l in (FIXTURES / "response_sample.jsonl").open(encoding="utf-8")]
+    sources = {}
+    for line in (FIXTURES / "source_info_sample.jsonl").open(encoding="utf-8"):
+        row = json.loads(line)
+        sources[row["source_id"]] = row
+    return responses, sources
 
-    if len(test) < MIN_SAMPLE:
-        print(f"BLOCKED: {len(test)} test rows < {MIN_SAMPLE} required. No quality number reported.")
-        return 2
 
+def _default_checker(evidence: str) -> TruthChecker:
+    return TruthChecker(experience_evidence=evidence)
+
+
+def score(test_rows: list, all_responses: list, sources: dict, *, min_sample: int = MIN_SAMPLE,
+         checker_factory=_default_checker, violation_types=None) -> "dict | None":
+    """Score ``test_rows`` (already filtered to the split under evaluation) against ``sources``.
+
+    ``all_responses`` is the population ``digit_span_ceiling`` scans -- deliberately not just
+    ``test_rows``, matching the original benchmark's behaviour of reporting the ceiling over
+    whichever corpus was loaded, not only the scored slice.
+
+    Pure and side-effect-free: no file writes, no stdout. Returns ``None`` (having printed BLOCKED)
+    when ``test_rows`` is under ``min_sample`` -- this IS the guard `TestBlockedPath` exercises.
+    """
+    if len(test_rows) < min_sample:
+        print(f"BLOCKED: {len(test_rows)} rows < {min_sample} required. No quality number reported.")
+        return None
+
+    violation_types = GENERIC_VIOLATIONS if violation_types is None else violation_types
     rows = []
     check_seconds = 0.0      # gate.check() alone: the steady-state cost per text
     full_seconds = 0.0       # + evidence serialization and checker construction: cold cost per pair
-    for r in test:
+    for r in test_rows:
         src = sources.get(r["source_id"])
         if not src:
             continue
         t_cold = time.perf_counter()
-        gate = TruthChecker(experience_evidence=evidence_for(src))
+        gate = checker_factory(evidence_for(src))
         t0 = time.perf_counter()
         result = gate.check(r["response"])
         t1 = time.perf_counter()
         check_seconds += t1 - t0
         full_seconds += t1 - t_cold
-        fired = [v for v in result.violations if v.violation_type in GENERIC_VIOLATIONS]
+        fired = [v for v in result.violations if v.violation_type in violation_types]
         rows.append({
             "cluster": r["source_id"],
             "task": src["task_type"],
@@ -130,7 +208,7 @@ def main() -> int:
 
     n = len(rows)
     clusters = len({x["cluster"] for x in rows})
-    digit_spans, all_spans = digit_span_ceiling(responses)
+    digit_spans, all_spans = digit_span_ceiling(all_responses)
     gold_pos = sum(1 for x in rows if x["gold"])
     tp = sum(1 for x in rows if x["pred"] and x["gold"])
     fp = sum(1 for x in rows if x["pred"] and not x["gold"])
@@ -141,54 +219,8 @@ def main() -> int:
     r_lo, r_hi = wilson(tp, tp + fn) if (tp + fn) else (0.0, 0.0)
     f_lo, f_hi = clustered_bootstrap_f1(rows, "cluster")
 
-    base = gold_pos / n
-    naive_f1 = 2 * base / (base + 1.0)
-
-    print("=" * 78)
-    print("veritas-gate on RAGTruth -- GENERIC-ONLY MODE (numeric groundedness)")
-    print("=" * 78)
-    print(f"test responses      : {n} (measured)")
-    print(f"source clusters     : {clusters} (measured)")
-    print(f"hallucinated (gold) : {gold_pos}  base rate {pct(base)} (measured)")
-    print(f"checks enabled      : {sorted(GENERIC_VIOLATIONS)}")
-    print(f"recall ceiling      : {pct(digit_spans / all_spans)} of {all_spans} annotated spans "
-          f"contain a digit (measured) -- both checks are digit matchers, so this caps recall")
-    print()
-    print("RESULT (response-level, measured)")
-    print(f"  fired on          : {tp + fp} responses")
-    print(f"  precision         : {pct(overall['precision'])}   Wilson 95% [{pct(p_lo)}, {pct(p_hi)}]")
-    print(f"  recall            : {pct(overall['recall'])}   Wilson 95% [{pct(r_lo)}, {pct(r_hi)}]")
-    print(f"  F1                : {pct(overall['f1'])}   source-clustered bootstrap 95% "
-          f"[{pct(f_lo)}, {pct(f_hi)}]")
-    print(f"  tp/fp/fn          : {tp}/{fp}/{fn}")
-    print()
-    print("MANDATORY FLOOR (computed)")
-    print(f"  always-positive   : precision {pct(base)}  recall 100.0%  F1 {pct(naive_f1)}")
-    verdict = "BEATS" if overall["f1"] > naive_f1 else "DOES NOT BEAT"
-    print(f"  -> this detector {verdict} the trivial classifier on F1")
-    print()
-    print("PUBLISHED BASELINES (RAGTruth paper, ACL 2024, Table 5 -- cited, not reproduced here)")
-    for name, p, r_, f in (("Prompt GPT-3.5-turbo", 37.1, 92.3, 52.9),
-                           ("Prompt GPT-4-turbo", 46.9, 97.9, 63.4),
-                           ("SelfCheckGPT GPT-3.5", 49.7, 71.9, 58.8),
-                           ("Finetuned Llama-2-13B", 76.9, 80.7, 78.7)):
-        print(f"  {name:22} P {p:5.1f}  R {r_:5.1f}  F1 {f:5.1f}")
-    print()
-    print("LATENCY (measured, this machine -- deliberately NOT written to results.json, which must"
-          " stay byte-identical across runs)")
-    print(f"  gate.check() only : {check_seconds * 1000 / n:.3f} ms/response  (steady state: one "
-          f"checker reused across texts)")
-    print(f"  + build & serialize: {full_seconds * 1000 / n:.3f} ms/response  (cold: a fresh "
-          f"checker and evidence bank per response -- what this harness actually does)")
-    print()
-    print("BY TASK TYPE (measured)")
-    for task in sorted({x["task"] for x in rows}):
-        sub = [x for x in rows if x["task"] == task]
-        s = prf(sum(1 for x in sub if x["pred"] and x["gold"]),
-                sum(1 for x in sub if x["pred"] and not x["gold"]),
-                sum(1 for x in sub if not x["pred"] and x["gold"]))
-        print(f"  {task:10} n={len(sub):5}  P {pct(s['precision']):>6}  R {pct(s['recall']):>6}  "
-              f"F1 {pct(s['f1']):>6}")
+    base = gold_pos / n if n else 0.0
+    naive_f1 = 2 * base / (base + 1.0) if (base + 1.0) else 0.0
 
     out = {
         "n": n, "source_clusters": clusters, "gold_positive": gold_pos, "base_rate": base,
@@ -200,15 +232,139 @@ def main() -> int:
         "precision_wilson95": [p_lo, p_hi], "recall_wilson95": [r_lo, r_hi],
         "f1_clustered_bootstrap95": [f_lo, f_hi],
         "naive_always_positive_f1": naive_f1,
-        "checks_enabled": sorted(GENERIC_VIOLATIONS),
+        "decision": decision_verdict(p_lo, r_lo, f_lo, naive_f1),
+        "checks_enabled": sorted(violation_types),
         "by_task": {t: prf(sum(1 for x in rows if x["task"] == t and x["pred"] and x["gold"]),
                            sum(1 for x in rows if x["task"] == t and x["pred"] and not x["gold"]),
                            sum(1 for x in rows if x["task"] == t and not x["pred"] and x["gold"]))
                     for t in sorted({x["task"] for x in rows})},
     }
-    (Path(__file__).resolve().parent / "results.json").write_text(
-        json.dumps(out, indent=1) + "\n", encoding="utf-8")
-    print("\nwrote benchmark/results.json")
+    # Deliberately NOT under a persisted top-level key -- wall-clock timing varies between runs by
+    # construction, and `results.json`'s determinism claim (byte-identical across runs) depends on
+    # every persisted field being a pure function of the input, not of when it happened to run.
+    # `main()` strips this key before writing the file; `print_report` reads it separately. An
+    # earlier version of this refactor put timing straight into the returned dict and broke exactly
+    # this -- caught by the full-pipeline determinism test, not by inspection.
+    out["_timing"] = {
+        "check_seconds_per_response": check_seconds / n if n else 0.0,
+        "full_seconds_per_response": full_seconds / n if n else 0.0,
+    }
+    return out
+
+
+def print_report(out: dict, *, title: str = "GENERIC-ONLY MODE (numeric groundedness)") -> None:
+    ceiling = out["digit_span_recall_ceiling"]
+    overall = out["overall"]
+    p_lo, p_hi = out["precision_wilson95"]
+    r_lo, r_hi = out["recall_wilson95"]
+    f_lo, f_hi = out["f1_clustered_bootstrap95"]
+
+    print("=" * 78)
+    print(f"veritas-gate on RAGTruth -- {title}")
+    print("=" * 78)
+    print(f"test responses      : {out['n']} (measured)")
+    print(f"source clusters     : {out['source_clusters']} (measured)")
+    print(f"hallucinated (gold) : {out['gold_positive']}  base rate {pct(out['base_rate'])} (measured)")
+    print(f"checks enabled      : {out['checks_enabled']}")
+    if ceiling["spans_total"]:
+        print(f"recall ceiling      : {pct(ceiling['ratio'])} of {ceiling['spans_total']} annotated "
+              f"spans contain a digit (measured)")
+    print()
+    print("RESULT (response-level, measured)")
+    print(f"  fired on          : {overall['tp'] + overall['fp']} responses")
+    print(f"  precision         : {pct(overall['precision'])}   Wilson 95% [{pct(p_lo)}, {pct(p_hi)}]")
+    print(f"  recall            : {pct(overall['recall'])}   Wilson 95% [{pct(r_lo)}, {pct(r_hi)}]")
+    print(f"  F1                : {pct(overall['f1'])}   source-clustered bootstrap 95% "
+          f"[{pct(f_lo)}, {pct(f_hi)}]")
+    print(f"  tp/fp/fn          : {overall['tp']}/{overall['fp']}/{overall['fn']}")
+    print()
+    print("MANDATORY FLOOR (computed)")
+    print(f"  always-positive   : precision {pct(out['base_rate'])}  recall 100.0%  "
+          f"F1 {pct(out['naive_always_positive_f1'])}")
+    print(f"  -> DECISION: {out['decision']}  (pre-registered rule, scored on the LOWER confidence "
+          f"bound -- see benchmark/metrics.py::decision_verdict)")
+    print()
+    timing = out.get("_timing")
+    if timing:
+        print(f"LATENCY (measured, this machine -- excluded from results.json on purpose, so that "
+              f"file stays byte-identical across runs)")
+        print(f"  gate.check() only : {timing['check_seconds_per_response'] * 1000:.3f} ms/response "
+              f"(steady state: one checker reused across texts)")
+        print(f"  + build & serialize: {timing['full_seconds_per_response'] * 1000:.3f} ms/response "
+              f"(cold: a fresh checker and evidence bank per response -- what this harness actually "
+              f"does)")
+        print()
+    print("BY TASK TYPE (measured)")
+    for task, s in sorted(out["by_task"].items()):
+        print(f"  {task:10} P {pct(s['precision']):>6}  R {pct(s['recall']):>6}  F1 {pct(s['f1']):>6}")
+
+
+def _print_published_baselines() -> None:
+    print("PUBLISHED BASELINES (RAGTruth paper, ACL 2024, Table 5 -- cited, not reproduced here)")
+    for name, p, r_, f in (("Prompt GPT-3.5-turbo", 37.1, 92.3, 52.9),
+                           ("Prompt GPT-4-turbo", 46.9, 97.9, 63.4),
+                           ("SelfCheckGPT GPT-3.5", 49.7, 71.9, 58.8),
+                           ("Finetuned Llama-2-13B", 76.9, 80.7, 78.7)):
+        print(f"  {name:22} P {p:5.1f}  R {r_:5.1f}  F1 {f:5.1f}")
+
+
+def _append_access_log(reason: str) -> None:
+    entry = {
+        "at_utc": datetime.now(timezone.utc).isoformat(),
+        "checker_sha256": _file_hash(*CHECKER_FILES),
+        "reason": reason,
+    }
+    with ACCESS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def _parse_args(argv: "list[str] | None") -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--reason", default=None,
+                   help="Why this run touches the real, sacred RAGTruth test split. Required unless "
+                        "--fixture. Appended to a permanent, committed TEST_SET_ACCESS_LOG.jsonl.")
+    p.add_argument("--fixture", action="store_true",
+                   help="Score the committed offline fixture slice instead of the real corpus. No "
+                        "network, no --reason, never writes results.json.")
+    return p.parse_args(argv)
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    args = _parse_args(argv)
+
+    if args.fixture:
+        responses, sources = load_fixture()
+    else:
+        if not args.reason:
+            print("BLOCKED: the real RAGTruth test split is scored deliberately rarely -- see "
+                  "\"TEST-SET ACCESS DISCIPLINE\" in this file's module docstring. Pass "
+                  "--reason \"...\" stating why this run is happening; it is appended to "
+                  "benchmark/TEST_SET_ACCESS_LOG.jsonl, a permanent, committed record. Iterate "
+                  "against the train split instead with `python benchmark/dev_run.py`.")
+            return 2
+        responses, sources = load()
+
+    test = [r for r in responses if r.get("split") == "test"]
+    out = score(test, responses, sources)
+    if out is None:
+        return 2
+
+    print_report(out)
+    print()
+    _print_published_baselines()
+
+    if not args.fixture:
+        out["provenance"] = {
+            "checker_sha256": _file_hash(*CHECKER_FILES),
+            "corpus_commit": fetch_data.CORPUS_COMMIT,
+            "corpus_sha256": dict(fetch_data.CHECKSUMS),
+        }
+        persisted = {k: v for k, v in out.items() if k != "_timing"}
+        RESULTS_PATH.write_text(json.dumps(persisted, indent=1, sort_keys=True) + "\n",
+                                encoding="utf-8")
+        print("\nwrote benchmark/results.json")
+        _append_access_log(args.reason)
+        print(f"logged this run to {ACCESS_LOG.name}")
     return 0
 
 

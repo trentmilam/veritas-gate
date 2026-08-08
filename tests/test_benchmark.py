@@ -11,16 +11,18 @@ quietly skips is how an untested claim ships.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
-BENCH = Path(__file__).resolve().parent.parent / "benchmark"
+ROOT = Path(__file__).resolve().parent.parent
+BENCH = ROOT / "benchmark"
 sys.path.insert(0, str(BENCH))
 
 import run as harness  # noqa: E402
-from metrics import clustered_bootstrap_f1, prf, wilson  # noqa: E402
+from metrics import clustered_bootstrap_f1, decision_verdict, prf, wilson  # noqa: E402
 
 
 def _rows(n_clusters: int = 40, per_cluster: int = 6) -> list[dict]:
@@ -82,7 +84,7 @@ class TestBlockedPath:
         small = [{"source_id": "s0", "response": "x", "split": "test", "labels": []}]
         monkeypatch.setattr(harness, "load", lambda: (small, {"s0": {}}))
 
-        assert harness.main() == 2
+        assert harness.main(["--reason", "test: undersized sample"]) == 2
 
         out = capsys.readouterr().out
         assert "BLOCKED" in out
@@ -91,6 +93,155 @@ class TestBlockedPath:
 
     def test_min_sample_is_a_real_floor(self):
         assert harness.MIN_SAMPLE >= 200
+
+
+class TestAccessDiscipline:
+    """A run against the real test split is deliberately rare and deliberately visible -- see the
+    module docstring's "TEST-SET ACCESS DISCIPLINE" section. These pin the two halves of that: the
+    gate can't be bypassed, and the fixture path (which never touches the real split) needs none of
+    it."""
+
+    def test_missing_reason_blocks_before_touching_the_corpus(self, monkeypatch, capsys):
+        def _must_not_be_called():
+            raise AssertionError("load() must never run when --reason was not given")
+        monkeypatch.setattr(harness, "load", _must_not_be_called)
+
+        assert harness.main([]) == 2   # must not raise -- proves load() was never reached
+        out = capsys.readouterr().out
+        assert "BLOCKED" in out
+        assert "--reason" in out
+
+    def test_a_real_run_appends_one_line_to_the_committed_access_log(self, tmp_path, monkeypatch):
+        log_path = tmp_path / "TEST_SET_ACCESS_LOG.jsonl"
+        monkeypatch.setattr(harness, "ACCESS_LOG", log_path)
+        monkeypatch.setattr(harness, "RESULTS_PATH", tmp_path / "results.json")
+        big = [{"source_id": f"s{i}", "response": "x", "split": "test", "labels": []}
+               for i in range(harness.MIN_SAMPLE)]
+        monkeypatch.setattr(harness, "load", lambda: (big, {f"s{i}": {} for i in range(len(big))}))
+
+        assert harness.main(["--reason", "unit test"]) == 0
+
+        lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert entry["reason"] == "unit test"
+        assert entry["checker_sha256"] == harness._file_hash(*harness.CHECKER_FILES)
+        assert "at_utc" in entry
+
+    def test_fixture_mode_needs_no_reason_and_touches_no_real_corpus(self, monkeypatch):
+        def _must_not_be_called():
+            raise AssertionError("load() (the real corpus) must never run in --fixture mode")
+        monkeypatch.setattr(harness, "load", _must_not_be_called)
+
+        assert harness.main(["--fixture"]) == 0   # must not raise
+
+
+class TestFixture:
+    """The committed offline slice CI actually runs against every push -- no network, no test-set
+    access. It exists to catch a harness-LOGIC bug (evidence serialization, the violation filter, the
+    metric formulas) that a README-text-diff test cannot: something with real corpus shape, scored on
+    every push, for free."""
+
+    def test_fixture_files_exist(self):
+        fx = BENCH / "fixtures"
+        assert (fx / "response_sample.jsonl").exists()
+        assert (fx / "source_info_sample.jsonl").exists()
+        assert (fx / "expected.json").exists()
+
+    def test_fixture_meets_the_min_sample_floor(self):
+        """If this fails, benchmark/fixtures/build_fixture.py's STRIDE needs lowering -- a fixture
+        under MIN_SAMPLE would silently stop exercising the real scoring path and only exercise
+        BLOCKED, which defeats the whole point of this fixture."""
+        responses, _ = harness.load_fixture()
+        test = [r for r in responses if r.get("split") == "test"]
+        assert len(test) >= harness.MIN_SAMPLE
+
+    def test_fixture_reproduces_its_committed_expected_values(self):
+        responses, sources = harness.load_fixture()
+        test = [r for r in responses if r.get("split") == "test"]
+        out = harness.score(test, responses, sources)
+        assert out is not None
+        expected = json.loads((BENCH / "fixtures" / "expected.json").read_text(encoding="utf-8"))
+        assert out["n"] == expected["n"]
+        assert out["overall"]["tp"] == expected["tp"]
+        assert out["overall"]["fp"] == expected["fp"]
+        assert out["overall"]["fn"] == expected["fn"]
+        assert out["digit_span_recall_ceiling"]["ratio"] == pytest.approx(
+            expected["digit_ceiling_ratio"])
+        assert out["digit_span_recall_ceiling"]["spans_total"] == expected["digit_spans_total"]
+
+    def test_full_pipeline_is_byte_identical_across_two_runs_on_the_fixture(self):
+        """The determinism claim tested end-to-end, not just clustered_bootstrap_f1 in isolation."""
+        responses, sources = harness.load_fixture()
+        test = [r for r in responses if r.get("split") == "test"]
+        out1 = harness.score(test, responses, sources)
+        out2 = harness.score(test, responses, sources)
+        # _timing is wall-clock and deliberately excluded from the determinism claim -- see the
+        # comment on score()'s `out["_timing"]` assignment in run.py.
+        persisted1 = {k: v for k, v in out1.items() if k != "_timing"}
+        persisted2 = {k: v for k, v in out2.items() if k != "_timing"}
+        assert json.dumps(persisted1, sort_keys=True) == json.dumps(persisted2, sort_keys=True)
+
+    def test_fixture_mode_never_touches_the_published_results_file(self, tmp_path, monkeypatch):
+        decoy = tmp_path / "should_not_be_written.json"
+        monkeypatch.setattr(harness, "RESULTS_PATH", decoy)
+        assert harness.main(["--fixture"]) == 0
+        assert not decoy.exists()
+
+
+class TestProvenance:
+    """The content-hash gate: `checker.py` changing with a stale committed `results.json` must fail
+    CI in the SAME PR, not drift silently. This is the direct fix for the harness previously only
+    checking README-text agreement with results.json, never results.json agreement with reality."""
+
+    @pytest.fixture
+    def results(self) -> dict:
+        path = BENCH / "results.json"
+        if not path.exists():
+            pytest.fail("benchmark/results.json is committed alongside the README; regenerate with "
+                        "`python benchmark/run.py --reason ...` rather than deleting it")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_committed_results_json_matches_the_current_checker_source(self, results):
+        current = harness._file_hash(*harness.CHECKER_FILES)
+        assert results.get("provenance", {}).get("checker_sha256") == current, (
+            "checker.py/aliases.py/claim_rules.py changed since benchmark/results.json was last "
+            "generated. Re-run `python benchmark/fetch_data.py && python benchmark/run.py --reason "
+            "...` and commit the new results.json + README together -- a stale results.json next to "
+            "changed detection code is exactly the failure this test exists to catch.")
+
+    def test_results_json_pins_the_exact_corpus_commit_and_checksums(self, results):
+        prov = results.get("provenance", {})
+        assert prov.get("corpus_commit") == harness.fetch_data.CORPUS_COMMIT
+        assert prov.get("corpus_sha256") == harness.fetch_data.CHECKSUMS
+
+    def test_results_json_records_the_pre_registered_decision(self, results):
+        assert results.get("decision") in (
+            "WORKS", "HIGH_PRECISION_FLAGGER_ONLY", "DOES_NOT_WORK")
+
+
+class TestDecisionRule:
+    """The tiering rule was written BEFORE any new detector was measured against the real test
+    split -- these pin the rule's own behaviour, independent of any particular result."""
+
+    def test_matches_the_conclusion_already_published_before_this_rule_existed(self):
+        """Today's committed numbers: P 50.0 [36.6,63.4], R 2.7 [1.8,3.9], F1 5.0 [3.3,7.1], naive
+        51.8%. Proof this rule was not backed out from an answer: it reproduces the conclusion the
+        README already stated in prose before this function existed."""
+        assert decision_verdict(0.366, 0.018, 0.033, 0.518) == "DOES_NOT_WORK"
+
+    def test_works_tier(self):
+        assert decision_verdict(p_lo=0.65, r_lo=0.55, f_lo=0.60, naive_f1=0.40) == "WORKS"
+
+    def test_flagger_tier_high_precision_low_recall(self):
+        assert decision_verdict(p_lo=0.65, r_lo=0.30, f_lo=0.55,
+                                naive_f1=0.40) == "HIGH_PRECISION_FLAGGER_ONLY"
+
+    def test_low_precision_alone_is_never_works_even_with_strong_recall_and_f1(self):
+        assert decision_verdict(p_lo=0.40, r_lo=0.90, f_lo=0.55, naive_f1=0.30) == "DOES_NOT_WORK"
+
+    def test_f1_at_or_below_the_floor_is_never_works_even_with_strong_precision_and_recall(self):
+        assert decision_verdict(p_lo=0.80, r_lo=0.80, f_lo=0.30, naive_f1=0.40) == "DOES_NOT_WORK"
 
 
 class TestScopeGuards:

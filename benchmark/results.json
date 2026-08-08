@@ -1,62 +1,71 @@
 {
- "n": 2700,
- "source_clusters": 450,
- "gold_positive": 943,
  "base_rate": 0.34925925925925927,
- "digit_span_recall_ceiling": {
-  "spans_with_digit": 2973,
-  "spans_total": 14289,
-  "ratio": 0.2080621457064875
+ "by_task": {
+  "Data2txt": {
+   "f1": 0.043478260869565216,
+   "fn": 566,
+   "fp": 6,
+   "precision": 0.6842105263157895,
+   "recall": 0.022452504317789293,
+   "tp": 13
+  },
+  "QA": {
+   "f1": 0.06779661016949153,
+   "fn": 154,
+   "fp": 11,
+   "precision": 0.35294117647058826,
+   "recall": 0.0375,
+   "tp": 6
+  },
+  "Summary": {
+   "f1": 0.055045871559633024,
+   "fn": 198,
+   "fp": 8,
+   "precision": 0.42857142857142855,
+   "recall": 0.029411764705882353,
+   "tp": 6
+  }
  },
+ "checks_enabled": [
+  "unverified_count",
+  "unverified_metric"
+ ],
+ "decision": "DOES_NOT_WORK",
+ "digit_span_recall_ceiling": {
+  "ratio": 0.2080621457064875,
+  "spans_total": 14289,
+  "spans_with_digit": 2973
+ },
+ "f1_clustered_bootstrap95": [
+  0.03305785123966942,
+  0.07121661721068248
+ ],
+ "gold_positive": 943,
+ "n": 2700,
+ "naive_always_positive_f1": 0.5177051880318418,
  "overall": {
+  "f1": 0.050352467270896276,
+  "fn": 918,
+  "fp": 25,
   "precision": 0.5,
   "recall": 0.026511134676564158,
-  "f1": 0.050352467270896276,
-  "tp": 25,
-  "fp": 25,
-  "fn": 918
+  "tp": 25
  },
  "precision_wilson95": [
   0.36644286412332855,
   0.6335571358766714
  ],
+ "provenance": {
+  "checker_sha256": "8d91516519d119644620e2b75ef3d1837df6d45335f2cda230cc9454adc02eb3",
+  "corpus_commit": "c103204b9ce28d6bbad859304bf30de72b8ed8fe",
+  "corpus_sha256": {
+   "response.jsonl": "e4c2e4ac24fff676d8984cc61c35d791612fadc58015335d97dd632375e18073",
+   "source_info.jsonl": "0dffc26ea9f3c1c3d7c7e8336b56ef1646e3cec876edffcca3c9c624d12d578b"
+  }
+ },
  "recall_wilson95": [
   0.018020584169772435,
   0.03884383750329305
  ],
- "f1_clustered_bootstrap95": [
-  0.03305785123966942,
-  0.07121661721068248
- ],
- "naive_always_positive_f1": 0.5177051880318418,
- "checks_enabled": [
-  "unverified_count",
-  "unverified_metric"
- ],
- "by_task": {
-  "Data2txt": {
-   "precision": 0.6842105263157895,
-   "recall": 0.022452504317789293,
-   "f1": 0.043478260869565216,
-   "tp": 13,
-   "fp": 6,
-   "fn": 566
-  },
-  "QA": {
-   "precision": 0.35294117647058826,
-   "recall": 0.0375,
-   "f1": 0.06779661016949153,
-   "tp": 6,
-   "fp": 11,
-   "fn": 154
-  },
-  "Summary": {
-   "precision": 0.42857142857142855,
-   "recall": 0.029411764705882353,
-   "f1": 0.055045871559633024,
-   "tp": 6,
-   "fp": 8,
-   "fn": 198
-  }
- }
+ "source_clusters": 450
 }

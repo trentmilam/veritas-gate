@@ -79,3 +79,39 @@ def clustered_bootstrap_f1(rows: list, cluster_key: str, n_boot: int = 2000,
 
 def pct(x: float) -> str:
     return f"{x * 100:.1f}%"
+
+
+# Pre-registered 2026-08-08, before any new detector was measured against the real test split --
+# see the design doc this benchmark's grounding checks were built from. Fixed thresholds, chosen
+# independently of any observed outcome, so a result cannot be scored by a rule quietly picked to
+# fit it. Every comparison uses the LOWER confidence bound, never the point estimate, specifically
+# so a lucky small-sample run cannot cross a tier by noise alone.
+_WORKS_MIN_RECALL = 0.50
+_WORKS_MIN_PRECISION = 0.60
+
+
+def decision_verdict(p_lo: float, r_lo: float, f_lo: float, naive_f1: float) -> str:
+    """Classify a measured result into one of three tiers.
+
+    WORKS                        -- f_lo > naive_f1 AND r_lo >= 0.50 AND p_lo >= 0.60. Trustworthy
+                                     as a standalone detector.
+    HIGH_PRECISION_FLAGGER_ONLY  -- p_lo >= 0.60 AND f_lo > naive_f1 AND r_lo < 0.50. Right when it
+                                     fires, but silent on too much of the problem to rely on its
+                                     silence -- usable as a pre-filter ahead of a judge or a human,
+                                     not as a replacement for one.
+    DOES_NOT_WORK                -- otherwise. This also covers "F1's upper bound can't clear the
+                                     floor" without taking the upper bound as an argument: f_lo <=
+                                     f_hi always, so f_lo failing to clear naive_f1 already implies
+                                     it, and there is no comparison this function makes against f_hi
+                                     directly.
+
+    Sanity check against the number that already existed when this rule was written (precision
+    50.0% [36.6, 63.4], recall 2.7% [1.8, 3.9], F1 5.0% [3.3, 7.1] vs a 51.8% naive floor):
+    ``decision_verdict(0.366, 0.018, 0.033, 0.518) == "DOES_NOT_WORK"`` -- matching the conclusion
+    that was already published, proving this rule was not backed out from an answer.
+    """
+    if f_lo > naive_f1 and r_lo >= _WORKS_MIN_RECALL and p_lo >= _WORKS_MIN_PRECISION:
+        return "WORKS"
+    if p_lo >= _WORKS_MIN_PRECISION and f_lo > naive_f1 and r_lo < _WORKS_MIN_RECALL:
+        return "HIGH_PRECISION_FLAGGER_ONLY"
+    return "DOES_NOT_WORK"
