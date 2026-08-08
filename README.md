@@ -123,14 +123,14 @@ python benchmark/run.py --detector grounding --reason "..."
 
 | | precision | recall | F1 |
 |---|---|---|---|
-| grounding ensemble | 39.5% `[37.5, 41.5]` | 96.1% `[94.6, 97.1]` | **56.0%** `[53.3, 58.6]` |
+| grounding ensemble | 40.1% `[38.1, 42.2]` | 96.0% `[94.5, 97.1]` | **56.6%** `[54.0, 59.2]` |
 | always-say-hallucinated | 34.9% | 100% | **51.8%** |
 
-The F1 lower bound (53.3%) does clear the trivial floor (51.8%) — a real, if narrow, margin. It is
+The F1 lower bound (54.0%) does clear the trivial floor (51.8%) — a real, if narrow, margin. It is
 still scored **DOES_NOT_WORK** by this project's pre-registered rule (`benchmark/metrics.py`,
 written before this number existed): `WORKS` and `HIGH_PRECISION_FLAGGER_ONLY` both require a
-precision lower bound of at least 60%, and this ensemble's is 37.5%. It fires on 2,295 of 2,700
-responses — 85% of the test split — which is also why recall is 96.1%: at that fire rate, missing a
+precision lower bound of at least 60%, and this ensemble's is 38.1%. It fires on 2,255 of 2,700
+responses — 84% of the test split — which is also why recall is 96.0%: at that fire rate, missing a
 real hallucination is hard, and so is being right about it.
 
 **Per task, not pooled — the pooled number hides two different stories:**
@@ -138,12 +138,12 @@ real hallucination is hard, and so is being right about it.
 | task | n | naive F1 | ensemble F1 | verdict |
 |---|---|---|---|---|
 | Data2txt | 900 | 78.3% | 78.3% | fires on 100% of responses — ties the floor exactly, no signal |
-| QA | 900 | 30.2% | 34.3% | real margin over the floor |
-| Summary | 900 | 37.0% | 40.1% | real margin over the floor |
+| QA | 900 | 30.2% | 34.5% | real margin over the floor |
+| Summary | 900 | 37.0% | 41.6% | real margin over the floor |
 
 Data2txt's recall is 100.0% and its precision (64.3%) equals that task's own base rate exactly —
 the ensemble fires on every single Data2txt response, so its F1 matching the naive floor is
-arithmetic, not detection. QA and Summary genuinely beat their own floors, by 4.1 and 3.1 points —
+arithmetic, not detection. QA and Summary genuinely beat their own floors, by 4.3 and 4.6 points —
 modest, real, and the only two task types where these checks are doing something a coin flip isn't.
 
 **The honest read:** three cheap, zero-dependency, literal-token checks recover a real (if thin)

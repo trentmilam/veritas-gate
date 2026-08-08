@@ -96,9 +96,19 @@ GROUNDING_FILES = CHECKER_FILES + (SRC / "grounding.py",)
 
 
 def _file_hash(*paths: Path) -> str:
+    """SHA-256 over the detector source, with line endings normalized to LF first.
+
+    Hashing raw bytes makes this value depend on the CHECKOUT's line-ending policy rather than on
+    the source's content: with `.gitattributes`' `text=auto eol=lf`, a Windows working tree that
+    predates it still holds CRLF while a fresh Linux CI checkout gets LF, and the two hash
+    differently for byte-identical code. That breaks the gate in the exact place it is supposed to
+    work -- a CI run would fail the provenance assertion on a source file nobody edited, while the
+    real question ("did the detector change?") went unanswered. A CRLF->LF conversion is by
+    definition not a detector change, so it must not move this hash.
+    """
     h = hashlib.sha256()
     for p in sorted(paths):
-        h.update(p.read_bytes())
+        h.update(p.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
     return h.hexdigest()
 
 

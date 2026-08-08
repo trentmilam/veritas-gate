@@ -31,8 +31,12 @@ per via vs etc
 """.split())
 
 # Sentence-opening words that are commonly capitalized purely by position ("The company shipped...",
-# "In 2019, the team..."), not because they name an entity. A SUBSET of _STOPWORDS -- only words
-# that plausibly open a sentence -- so a capitalized opener doesn't get flagged as a proper noun.
+# "In 2019, the team..."), not because they name an entity -- so a capitalized opener doesn't get
+# flagged as a proper noun. Overlaps _STOPWORDS heavily but is NOT a subset of it: discourse markers
+# that open sentences without being function words ("According", "However", "Moreover", "Since",
+# "Thus", "Whereas") belong here and not there. Order matters in ungrounded_entities(): the stopword
+# filter runs first, so a word in both sets is dropped regardless of position, and a word only here
+# is dropped only at position 0 -- which is the intent.
 _SENTENCE_OPENERS = frozenset("""
 the this that these those it in on at for with according additionally also after although and
 as because before but by during either following from given however if moreover of once only or
@@ -44,10 +48,20 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 
 def _numeric_tokens(text: str) -> set:
-    """All numeric tokens in ``text`` (comma/space-stripped digit runs). Intentionally a standalone
-    copy of checker.py's ``_digits_in`` rather than an import of it -- checker.py imports the checks
-    in THIS module, so importing back would be circular. Keep the regex in sync if it ever changes."""
-    return {re.sub(r"[,\s]", "", t) for t in re.findall(r"\d[\d.,]*", text or "")}
+    """All numeric tokens in ``text``, comma/space-stripped and with trailing punctuation removed.
+
+    Intentionally a standalone copy of checker.py's ``_digits_in`` rather than an import of it --
+    checker.py imports the checks in THIS module, so importing back would be circular.
+
+    The trailing-punctuation strip is the one deliberate difference from ``_digits_in``, and it is a
+    bug fix, not a variation: ``\\d[\\d.,]*`` is greedy, so a figure that ends a sentence tokenizes
+    WITH its period ("shipped in 2019." -> "2019."). Comparing that against the same figure
+    mid-sentence in a draft ("2019") then reports a grounded number as ungrounded -- a pure false
+    positive produced by punctuation. Both sides normalize here, so they compare equal. An internal
+    decimal point is preserved ("4.5" stays "4.5"); only trailing '.'/',' are dropped.
+    """
+    return {re.sub(r"[.,]+$", "", re.sub(r"[,\s]", "", t))
+            for t in re.findall(r"\d[\d.,]*", text or "")} - {""}
 
 
 def broadened_numeric_ungrounded(draft_text: str, evidence_text: str) -> list:
@@ -71,7 +85,7 @@ def ungrounded_entities(draft_text: str, evidence_text: str) -> list:
     (``_SENTENCE_OPENERS``), so ordinary capitalization from sentence position isn't mistaken for a
     name."""
     evidence_words = _content_words(evidence_text)
-    out = []
+    out, seen = [], set()
     for sentence in _SENTENCE_SPLIT.split(draft_text or ""):
         for i, w in enumerate(_WORD_RE.findall(sentence)):
             if not w[0].isupper():
@@ -81,7 +95,12 @@ def ungrounded_entities(draft_text: str, evidence_text: str) -> list:
                 continue
             if i == 0 and low in _SENTENCE_OPENERS:
                 continue
-            if low not in evidence_words:
+            # One finding per distinct name, in first-appearance order. A fabricated company named
+            # eight times is one thing to fix, and eight identical violations bury the other
+            # findings -- the same cap claim_rules.py states for a repeated phrase. Deduplicating
+            # cannot change WHETHER the check fires, only how many violations one firing produces.
+            if low not in evidence_words and low not in seen:
+                seen.add(low)
                 out.append(w)
     return out
 
@@ -96,18 +115,27 @@ _NOVELTY_THRESHOLD = 0.6
 
 def novel_content_windows(draft_text: str, evidence_text: str, *, window: int = _NOVELTY_WINDOW,
                           threshold: float = _NOVELTY_THRESHOLD) -> list:
-    """Content-word windows of ``draft_text`` whose novel-token ratio (tokens absent from
-    ``evidence_text``'s content-word set) meets ``threshold``. Returns the offending window text,
-    one entry per qualifying window (overlapping windows both reported, not deduplicated -- the
-    caller decides how many violations that's worth)."""
+    """Ungrounded passages of ``draft_text``: maximal runs of content words covered by at least one
+    sliding window whose novel-token ratio (tokens absent from ``evidence_text``'s content-word set)
+    meets ``threshold``.
+
+    Overlapping qualifying windows are MERGED into one span rather than reported individually. A
+    60-word ungrounded paragraph is one problem to fix, and emitting 51 near-identical violations for
+    it buries every other finding -- the same reasoning claim_rules.py states for its one-finding-
+    per-clause cap. Merging cannot change whether the check fires at all, only how many violations
+    one firing produces, so it does not affect any response-level benchmark number.
+    """
     evidence_words = _content_words(evidence_text)
     tokens = [w.lower() for w in _WORD_RE.findall(draft_text or "") if w.lower() not in _STOPWORDS]
     if len(tokens) < window:
         return []
-    out = []
+
+    spans: list = []          # merged [start, end) token ranges
     for i in range(len(tokens) - window + 1):
-        span = tokens[i:i + window]
-        novel = sum(1 for t in span if t not in evidence_words)
-        if novel / window >= threshold:
-            out.append(" ".join(span))
-    return out
+        if sum(1 for t in tokens[i:i + window] if t not in evidence_words) / window < threshold:
+            continue
+        if spans and i <= spans[-1][1]:          # overlaps or abuts the previous span -- extend it
+            spans[-1][1] = i + window
+        else:
+            spans.append([i, i + window])
+    return [" ".join(tokens[s:e]) for s, e in spans]

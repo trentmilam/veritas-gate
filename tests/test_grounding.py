@@ -22,12 +22,23 @@ class TestBroadenedNumericUngrounded:
         assert "47" in broadened_numeric_ungrounded("The team shipped 47 updates.", EVIDENCE)
 
     def test_matches_only_the_unevidenced_token_not_the_whole_sentence(self) -> None:
-        # A trailing "." abuts the digit run and is swept in by design (same _digits_in()-style
-        # regex checker.py's own TC-3/TC-6 use) -- assert by substring, not exact token equality.
         out = broadened_numeric_ungrounded("Revenue reached 4.5 million and headcount hit 999 now.",
                                             EVIDENCE)
-        assert any("999" in t for t in out)
-        assert not any("4.5" in t for t in out)  # evidenced
+        assert out == ["999"]          # 4.5 is evidenced; only the fabricated figure survives
+
+    def test_a_figure_ending_a_sentence_in_the_evidence_still_counts_as_grounded(self) -> None:
+        """The digit regex is greedy, so a figure that ends a sentence tokenizes WITH its period
+        ("...in 2019." -> "2019."). Without stripping that, the same figure mid-sentence in the
+        draft ("2019") compares unequal and a perfectly grounded number is reported as fabricated --
+        a false positive manufactured entirely by punctuation."""
+        assert broadened_numeric_ungrounded("Shipped in 2019 on schedule.",
+                                            "The product shipped in 2019.") == []
+
+    def test_an_internal_decimal_point_is_not_stripped(self) -> None:
+        """The trailing-punctuation strip must not turn 4.5 into 4 -- that would silently make two
+        different figures compare equal, trading a false positive for a false negative."""
+        assert broadened_numeric_ungrounded("Revenue was 4.5 million.", "Revenue was 4 million.") \
+            == ["4.5"]
 
 
 class TestUngroundedEntities:
@@ -47,6 +58,26 @@ class TestUngroundedEntities:
         # stopword should never fire regardless of position since stopwords are always excluded.
         out = ungrounded_entities("Shipped it In record time.", EVIDENCE)
         assert "In" not in out
+
+    def test_one_name_repeated_is_one_finding(self) -> None:
+        """A fabricated company named five times is one thing to fix -- five identical violations
+        bury every other finding, the cap claim_rules.py states for a repeated phrase."""
+        draft = "Zorbex led the deal. Zorbex grew fast. Zorbex hired many. Zorbex shipped it."
+        assert ungrounded_entities(draft, EVIDENCE) == ["Zorbex"]
+
+    def test_distinct_names_are_all_still_reported(self) -> None:
+        """Deduplication must collapse repeats of ONE name, not distinct names."""
+        out = ungrounded_entities("Zorbex acquired Prendergast. Then Zorbex hired Vashti.",
+                                  EVIDENCE)
+        assert out == ["Zorbex", "Prendergast", "Vashti"]      # first-appearance order
+
+    def test_a_capitalized_non_opener_adverb_is_a_known_false_positive(self) -> None:
+        """Pins a real, priced-in limitation rather than papering over it: this check is a cheap
+        capitalization proxy, so a sentence-opening adverb outside the opener lexicon ("Later")
+        reads as a proper noun. This is part of why the measured precision is 40.1%, and why the
+        three grounding checks ship opt-in and off by default. Change this only by re-running
+        benchmark/tune.py -- never by adding words after eyeballing one example."""
+        assert "Later" in ungrounded_entities("Later Zorbex hired Vashti.", EVIDENCE)
 
 
 class TestNovelContentWindows:
@@ -68,6 +99,28 @@ class TestNovelContentWindows:
         strict = novel_content_windows(draft, EVIDENCE, window=5, threshold=1.0)
         loose = novel_content_windows(draft, EVIDENCE, window=5, threshold=0.6)
         assert len(loose) >= len(strict)
+
+    # _WORD_RE matches letters only, so distinct filler tokens must be letter-only too -- "novel0"
+    # and "novel1" both tokenize to "novel".
+    _FILLER_A = "quark zephyr mango trellis vortex nimbus cobalt saffron gantry plinth widget dovetail"
+    _FILLER_B = "obelisk lantern harrow spindle thicket bramble cinder marrow rivet tundra fathom quill"
+
+    def test_one_long_ungrounded_passage_is_one_finding_not_one_per_window(self) -> None:
+        """A long ungrounded paragraph is one problem to fix. Reporting it once per sliding window
+        (51 near-identical violations for a 60-word passage) buries every other finding -- the same
+        reasoning claim_rules.py gives for its one-finding-per-clause cap."""
+        draft = f"{self._FILLER_A} {self._FILLER_B}"
+        out = novel_content_windows(draft, "Nothing related here at all.", window=10, threshold=1.0)
+        assert len(out) == 1
+        assert len(out[0].split()) == 24          # the merged span covers the whole passage
+
+    def test_two_separated_ungrounded_passages_stay_two_findings(self) -> None:
+        """Merging must join only overlapping windows, not collapse genuinely distinct passages."""
+        grounded = "acme corp falcon platform engineers latency caching layer revenue dollars year"
+        draft = f"{self._FILLER_A} {grounded} {self._FILLER_B}"
+        out = novel_content_windows(draft, EVIDENCE, window=10, threshold=1.0)
+        assert len(out) == 2
+        assert out[0].startswith("quark") and out[1].startswith("obelisk")
 
 
 class TestWiredIntoTruthChecker:

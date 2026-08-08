@@ -219,6 +219,28 @@ class TestProvenance:
         assert results.get("decision") in (
             "WORKS", "HIGH_PRECISION_FLAGGER_ONLY", "DOES_NOT_WORK")
 
+    def test_the_hash_is_invariant_to_line_endings(self, tmp_path):
+        """The gate must answer "did the detector change?", not "what line endings does this
+        checkout use?". `.gitattributes` normalizes to LF in the repo, so a Windows working tree
+        holding CRLF and a fresh Linux CI checkout holding LF see byte-DIFFERENT, content-IDENTICAL
+        source. Hashing raw bytes made those two hash differently -- so CI would have failed the
+        provenance assertion on a file nobody edited, on the very first push, while the real
+        question went unanswered."""
+        body = "def check():\n    return 1\n"
+        lf, crlf = tmp_path / "lf.py", tmp_path / "crlf.py"
+        lf.write_bytes(body.encode())
+        crlf.write_bytes(body.replace("\n", "\r\n").encode())
+        assert lf.read_bytes() != crlf.read_bytes()          # genuinely different on disk
+        assert harness._file_hash(lf) == harness._file_hash(crlf)
+
+    def test_the_hash_still_changes_when_the_source_actually_changes(self, tmp_path):
+        """The other half of the contract -- normalizing line endings must not have blunted the
+        gate into ignoring a real edit."""
+        a, b = tmp_path / "a.py", tmp_path / "b.py"
+        a.write_bytes(b"def check():\n    return 1\n")
+        b.write_bytes(b"def check():\n    return 2\n")
+        assert harness._file_hash(a) != harness._file_hash(b)
+
 
 class TestDecisionRule:
     """The tiering rule was written BEFORE any new detector was measured against the real test
@@ -336,6 +358,21 @@ class TestGroundingNumbersMatchTheResultsFile:
         assert results["decision"] == "DOES_NOT_WORK", (
             "grounding ensemble's decision changed -- the README's grounding-checks section needs a "
             "rewrite, not just new numbers")
+
+    def test_committed_results_match_the_current_grounding_source(self, published):
+        """The same content-hash gate TestProvenance applies to results.json, applied to the
+        grounding detector's own file over its own file set (GROUNDING_FILES, which adds
+        grounding.py). Without this, a grounding.py edit could ship with a stale
+        results_grounding.json and nothing would fail -- the published number silently describing
+        code that no longer exists. Found exactly that way: grounding.py changed, every test still
+        passed, because the only provenance assertion covered the OTHER results file."""
+        results, _ = published
+        current = harness._file_hash(*harness.GROUNDING_FILES)
+        assert results.get("provenance", {}).get("checker_sha256") == current, (
+            "grounding.py/checker.py/aliases.py/claim_rules.py changed since "
+            "benchmark/results_grounding.json was generated. Re-run `python benchmark/run.py "
+            "--detector grounding --reason ...` and commit the new results file + any README "
+            "numbers it moved, together with the code change that caused it.")
 
 
 class TestRegistryBlastRadius:
