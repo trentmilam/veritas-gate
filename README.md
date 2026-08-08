@@ -94,6 +94,62 @@ attribution, the entity index, `rubric_score`) have no ground truth here and wer
 than scored on a corpus they were not built for. Span-level localization was not attempted; the gate
 returns a verdict, not character offsets.
 
+## Grounding checks for the other 79.2%
+
+TC-3/TC-6 above are digit matchers, structurally blind to any hallucination span with no digit in
+it. `src/veritas_gate/grounding.py` adds three checks aimed at that remainder, all opt-in and OFF by
+default (`TruthChecker(..., enable_broadened_numeric=True, enable_entity_grounding=True,
+enable_novelty_check=True)`):
+
+- **`unverified_number`** — every digit token in the draft absent from the evidence, dropping TC-3/
+  TC-6's %/$/multiplier/count-noun restriction.
+- **`ungrounded_entity`** — a capitalized token the evidence never mentions (a cheap proxy for a
+  fabricated name), excluding common sentence-openers so ordinary capitalization from sentence
+  position isn't mistaken for a name.
+- **`novel_content_window`** — a sliding window of stopword-filtered content words where the whole
+  window is absent from the evidence. The window size and novelty threshold (10 tokens, 100% novel)
+  are the winner of a train-split-only grid search (`python benchmark/tune.py`) over window sizes
+  3/5/7/10 and thresholds 0.6/0.8/1.0 — every other point scored lower on train.
+
+Reproduce it:
+
+```bash
+python benchmark/fetch_data.py           # once, if not already done
+python benchmark/tune.py                 # train-only CV, writes nothing
+python benchmark/run.py --detector grounding --reason "..."
+```
+
+**Result** on the same 2,700-response test split, ensemble vote-of-one across all three checks:
+
+| | precision | recall | F1 |
+|---|---|---|---|
+| grounding ensemble | 39.5% `[37.5, 41.5]` | 96.1% `[94.6, 97.1]` | **56.0%** `[53.3, 58.6]` |
+| always-say-hallucinated | 34.9% | 100% | **51.8%** |
+
+The F1 lower bound (53.3%) does clear the trivial floor (51.8%) — a real, if narrow, margin. It is
+still scored **DOES_NOT_WORK** by this project's pre-registered rule (`benchmark/metrics.py`,
+written before this number existed): `WORKS` and `HIGH_PRECISION_FLAGGER_ONLY` both require a
+precision lower bound of at least 60%, and this ensemble's is 37.5%. It fires on 2,295 of 2,700
+responses — 85% of the test split — which is also why recall is 96.1%: at that fire rate, missing a
+real hallucination is hard, and so is being right about it.
+
+**Per task, not pooled — the pooled number hides two different stories:**
+
+| task | n | naive F1 | ensemble F1 | verdict |
+|---|---|---|---|---|
+| Data2txt | 900 | 78.3% | 78.3% | fires on 100% of responses — ties the floor exactly, no signal |
+| QA | 900 | 30.2% | 34.3% | real margin over the floor |
+| Summary | 900 | 37.0% | 40.1% | real margin over the floor |
+
+Data2txt's recall is 100.0% and its precision (64.3%) equals that task's own base rate exactly —
+the ensemble fires on every single Data2txt response, so its F1 matching the naive floor is
+arithmetic, not detection. QA and Summary genuinely beat their own floors, by 4.1 and 3.1 points —
+modest, real, and the only two task types where these checks are doing something a coin flip isn't.
+
+**The honest read:** three cheap, zero-dependency, literal-token checks recover a real (if thin)
+signal on two of three task types, at a precision too low to trust unsupervised. Useful as a
+pre-filter to route to a human or a judge model, not as a standalone gate.
+
 ## What it checks
 
 **`TruthChecker`** — deterministic verification against a configured evidence bank:

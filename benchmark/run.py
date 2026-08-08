@@ -82,12 +82,17 @@ RESULTS_PATH = HERE / "results.json"
 ACCESS_LOG = HERE / "TEST_SET_ACCESS_LOG.jsonl"
 
 GENERIC_VIOLATIONS = {"unverified_metric", "unverified_count"}
+# The three opt-in grounding.py checks -- broadened numeric, ungrounded entity, and
+# content-word novelty window. Off by default in TruthChecker; _grounding_checker() below turns
+# all three on so this violation set is exactly what fires.
+GROUNDING_VIOLATIONS = {"unverified_number", "ungrounded_entity", "novel_content_window"}
 MIN_SAMPLE = 200          # below this the run reports BLOCKED and no quality number
 
 # The exact files that constitute "the detector" for provenance purposes. Anything that changes what
 # gets scored belongs in this tuple -- if a new check is added to grounding.py and wired through
 # checker.py, add its module here too, or the content-hash gate stops meaning what it claims to.
 CHECKER_FILES = (SRC / "checker.py", SRC / "aliases.py", SRC / "claim_rules.py")
+GROUNDING_FILES = CHECKER_FILES + (SRC / "grounding.py",)
 
 
 def _file_hash(*paths: Path) -> str:
@@ -165,6 +170,14 @@ def load_fixture() -> tuple[list, dict]:
 
 def _default_checker(evidence: str) -> TruthChecker:
     return TruthChecker(experience_evidence=evidence)
+
+
+def _grounding_checker(evidence: str) -> TruthChecker:
+    """TC-3/TC-6 plus the three grounding.py checks, all opt-in flags on.
+    ``GROUNDING_VIOLATIONS`` filters scoring to just the three new checks, matching how
+    ``_default_checker``'s score is filtered to just TC-3/TC-6 via ``GENERIC_VIOLATIONS``."""
+    return TruthChecker(experience_evidence=evidence, enable_broadened_numeric=True,
+                        enable_entity_grounding=True, enable_novelty_check=True)
 
 
 def score(test_rows: list, all_responses: list, sources: dict, *, min_sample: int = MIN_SAMPLE,
@@ -308,10 +321,10 @@ def _print_published_baselines() -> None:
         print(f"  {name:22} P {p:5.1f}  R {r_:5.1f}  F1 {f:5.1f}")
 
 
-def _append_access_log(reason: str) -> None:
+def _append_access_log(reason: str, checker_files: tuple = CHECKER_FILES) -> None:
     entry = {
         "at_utc": datetime.now(timezone.utc).isoformat(),
-        "checker_sha256": _file_hash(*CHECKER_FILES),
+        "checker_sha256": _file_hash(*checker_files),
         "reason": reason,
     }
     with ACCESS_LOG.open("a", encoding="utf-8") as f:
@@ -326,11 +339,22 @@ def _parse_args(argv: "list[str] | None") -> argparse.Namespace:
     p.add_argument("--fixture", action="store_true",
                    help="Score the committed offline fixture slice instead of the real corpus. No "
                         "network, no --reason, never writes results.json.")
+    p.add_argument("--detector", choices=("generic", "grounding"), default="generic",
+                   help="'generic' (default): TC-3/TC-6 digit checks only, writes results.json. "
+                        "'grounding': the three grounding.py checks, writes "
+                        "results_grounding.json -- a separate file so the generic-only baseline is "
+                        "never silently overwritten by a different detector's numbers.")
     return p.parse_args(argv)
 
 
 def main(argv: "list[str] | None" = None) -> int:
     args = _parse_args(argv)
+    grounding = args.detector == "grounding"
+    checker_factory = _grounding_checker if grounding else _default_checker
+    violation_types = GROUNDING_VIOLATIONS if grounding else GENERIC_VIOLATIONS
+    checker_files = GROUNDING_FILES if grounding else CHECKER_FILES
+    results_path = HERE / "results_grounding.json" if grounding else RESULTS_PATH
+    title = "GROUNDING CHECKS" if grounding else "GENERIC-ONLY MODE (numeric groundedness)"
 
     if args.fixture:
         responses, sources = load_fixture()
@@ -345,25 +369,26 @@ def main(argv: "list[str] | None" = None) -> int:
         responses, sources = load()
 
     test = [r for r in responses if r.get("split") == "test"]
-    out = score(test, responses, sources)
+    out = score(test, responses, sources, checker_factory=checker_factory,
+               violation_types=violation_types)
     if out is None:
         return 2
 
-    print_report(out)
+    print_report(out, title=title)
     print()
     _print_published_baselines()
 
     if not args.fixture:
         out["provenance"] = {
-            "checker_sha256": _file_hash(*CHECKER_FILES),
+            "checker_sha256": _file_hash(*checker_files),
             "corpus_commit": fetch_data.CORPUS_COMMIT,
             "corpus_sha256": dict(fetch_data.CHECKSUMS),
         }
         persisted = {k: v for k, v in out.items() if k != "_timing"}
-        RESULTS_PATH.write_text(json.dumps(persisted, indent=1, sort_keys=True) + "\n",
+        results_path.write_text(json.dumps(persisted, indent=1, sort_keys=True) + "\n",
                                 encoding="utf-8")
-        print("\nwrote benchmark/results.json")
-        _append_access_log(args.reason)
+        print(f"\nwrote benchmark/{results_path.name}")
+        _append_access_log(args.reason, checker_files)
         print(f"logged this run to {ACCESS_LOG.name}")
     return 0
 

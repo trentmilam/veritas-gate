@@ -1,0 +1,72 @@
+{
+ "base_rate": 0.34925925925925927,
+ "by_task": {
+  "Data2txt": {
+   "f1": 0.7829614604462475,
+   "fn": 0,
+   "fp": 321,
+   "precision": 0.6433333333333333,
+   "recall": 1.0,
+   "tp": 579
+  },
+  "QA": {
+   "f1": 0.3434343434343435,
+   "fn": 7,
+   "fp": 578,
+   "precision": 0.20930232558139536,
+   "recall": 0.95625,
+   "tp": 153
+  },
+  "Summary": {
+   "f1": 0.40092165898617504,
+   "fn": 30,
+   "fp": 490,
+   "precision": 0.2620481927710843,
+   "recall": 0.8529411764705882,
+   "tp": 174
+  }
+ },
+ "checks_enabled": [
+  "novel_content_window",
+  "ungrounded_entity",
+  "unverified_number"
+ ],
+ "decision": "DOES_NOT_WORK",
+ "digit_span_recall_ceiling": {
+  "ratio": 0.2080621457064875,
+  "spans_total": 14289,
+  "spans_with_digit": 2973
+ },
+ "f1_clustered_bootstrap95": [
+  0.5333759182369849,
+  0.5856585658565857
+ ],
+ "gold_positive": 943,
+ "n": 2700,
+ "naive_always_positive_f1": 0.5177051880318418,
+ "overall": {
+  "f1": 0.5596046942557134,
+  "fn": 37,
+  "fp": 1389,
+  "precision": 0.39477124183006534,
+  "recall": 0.9607635206786851,
+  "tp": 906
+ },
+ "precision_wilson95": [
+  0.3749645404289957,
+  0.414929639317882
+ ],
+ "provenance": {
+  "checker_sha256": "a49138cc622d54bb23020cdca541268d46d08d2b021e2febdb8e24b6cd7ad624",
+  "corpus_commit": "c103204b9ce28d6bbad859304bf30de72b8ed8fe",
+  "corpus_sha256": {
+   "response.jsonl": "e4c2e4ac24fff676d8984cc61c35d791612fadc58015335d97dd632375e18073",
+   "source_info.jsonl": "0dffc26ea9f3c1c3d7c7e8336b56ef1646e3cec876edffcca3c9c624d12d578b"
+  }
+ },
+ "recall_wilson95": [
+  0.9463863985939945,
+  0.9714017509761134
+ ],
+ "source_clusters": 450
+}

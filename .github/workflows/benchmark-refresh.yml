@@ -25,20 +25,26 @@ jobs:
       - name: Fetch the pinned RAGTruth corpus (checksum-verified, aborts on mismatch)
         run: python benchmark/fetch_data.py
 
-      - name: Re-run the disciplined benchmark against the test split
+      - name: Re-run the disciplined benchmark against the test split (generic detector)
         run: >
           python benchmark/run.py --reason "scheduled benchmark-refresh (${{ github.event_name }})
           -- verifying checker.py/aliases.py/claim_rules.py have not silently drifted from the
           committed results.json"
 
-      - name: Fail loudly on any drift from the committed results.json
+      - name: Re-run the disciplined benchmark against the test split (grounding detector)
+        run: >
+          python benchmark/run.py --detector grounding --reason "scheduled benchmark-refresh
+          (${{ github.event_name }}) -- verifying grounding.py has not silently drifted from the
+          committed results_grounding.json"
+
+      - name: Fail loudly on any drift from either committed results file
         run: |
-          if ! git diff --exit-code -- benchmark/results.json; then
-            echo "::error::benchmark/results.json no longer matches what the current checker source produces."
+          if ! git diff --exit-code -- benchmark/results.json benchmark/results_grounding.json; then
+            echo "::error::a benchmark results file no longer matches what the current detector code produces."
             echo "::error::A detection-code change shipped without a matching benchmark run + README update."
-            echo '::error::Re-run `python benchmark/run.py --reason "..."` locally, review the diff, and'
-            echo "::error::commit the new results.json (and any README numbers that changed) together with"
-            echo "::error::the code change that caused it."
+            echo '::error::Re-run `python benchmark/run.py --reason "..."` (add --detector grounding if that'
+            echo "::error::file drifted) locally, review the diff, and commit the new results file (and any"
+            echo "::error::README numbers that changed) together with the code change that caused it."
             exit 1
           fi
-          echo "benchmark/results.json matches current checker source -- no drift."
+          echo "benchmark results files match current detector source -- no drift."

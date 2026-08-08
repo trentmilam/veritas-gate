@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .grounding import broadened_numeric_ungrounded, novel_content_windows, ungrounded_entities
+
 # Professional credentials the checker flags when asserted-but-unevidenced. The index builder and
 # the draft checker MUST use this same set, or a real credential is recognized by one and not the
 # other (which silently withholds a truthful résumé).
@@ -386,6 +388,9 @@ class TruthChecker:
         forbidden_skills: Optional[list[str]] = None,
         employer_markers: Optional[tuple] = None,
         self_project_markers: Optional[tuple] = None,
+        enable_broadened_numeric: bool = False,
+        enable_entity_grounding: bool = False,
+        enable_novelty_check: bool = False,
     ) -> None:
         self.candidate_profile = candidate_profile
         self.experience_evidence = experience_evidence
@@ -394,6 +399,13 @@ class TruthChecker:
         # Attribution (TC-5) markers, caller-supplied. Default empty -> the check is inert.
         self._employer_markers = tuple(employer_markers or ())
         self._self_project_markers = tuple(self_project_markers or ())
+        # Grounding checks (grounding.py) for the 79.2% of hallucination spans TC-3/TC-6 can't see
+        # (no digit). Opt-in, default OFF -- unlike TC-3/TC-6 these are broader, noisier literal-
+        # token-presence tests, not yet proven at the precision/recall bar TC-3/TC-6 clear alone. See
+        # benchmark/README for the measured numbers before enabling any of these on real drafts.
+        self._enable_broadened_numeric = enable_broadened_numeric
+        self._enable_entity_grounding = enable_entity_grounding
+        self._enable_novelty_check = enable_novelty_check
 
         # Whitespace- AND hyphen-normalized so a re-spaced ('active   secret clearance') or
         # re-hyphenated ('cloud native' vs 'cloud-native') forbidden phrase can't bypass the
@@ -583,6 +595,40 @@ class TruthChecker:
                     severity="medium",
                     suggestion=f"count {core} not found in evidence; use the evidence figure "
                                f"(verify '{token}' is real or replace it before sending).",
+                )
+
+        # Grounding checks (grounding.py), each opt-in and inert unless its flag was set at
+        # construction. Non-blocking (medium) for the same reason TC-3/TC-6 are: these are literal-
+        # token-presence proxies, not semantic verification, so a false fire shouldn't hard-withhold
+        # an otherwise truthful draft.
+        if self._enable_broadened_numeric:
+            for token in broadened_numeric_ungrounded(draft_text, self.experience_evidence):
+                result.add_violation(
+                    claim=token,
+                    violation_type="unverified_number",
+                    severity="medium",
+                    suggestion=f"'{token}' is not a figure in your evidence -- verify it's real or "
+                               "remove it before sending.",
+                )
+
+        if self._enable_entity_grounding:
+            for token in ungrounded_entities(draft_text, self.experience_evidence):
+                result.add_violation(
+                    claim=token,
+                    violation_type="ungrounded_entity",
+                    severity="medium",
+                    suggestion=f"'{token}' does not appear in your evidence -- verify it's real or "
+                               "remove it before sending.",
+                )
+
+        if self._enable_novelty_check:
+            for window in novel_content_windows(draft_text, self.experience_evidence):
+                result.add_violation(
+                    claim=window,
+                    violation_type="novel_content_window",
+                    severity="medium",
+                    suggestion=f"'{window}' shares no content word with your evidence -- verify "
+                               "this passage is grounded before sending.",
                 )
 
         result.generate_summary()

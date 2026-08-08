@@ -304,6 +304,40 @@ class TestPublishedNumbersMatchTheResultsFile:
         assert "not beat a trivial classifier" in readme.lower()
 
 
+class TestGroundingNumbersMatchTheResultsFile:
+    """Same drift guard as TestPublishedNumbersMatchTheResultsFile, for the grounding
+    ensemble's own results file -- a second published number is a second place drift can hide."""
+
+    @pytest.fixture
+    def published(self) -> tuple[dict, str]:
+        results = BENCH / "results_grounding.json"
+        if not results.exists():
+            pytest.fail("benchmark/results_grounding.json is committed alongside the README; "
+                        "regenerate with `python benchmark/run.py --detector grounding` rather than "
+                        "deleting it")
+        return json.loads(results.read_text(encoding="utf-8")), (
+            ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_every_headline_figure_appears_verbatim(self, published):
+        results, readme = published
+        expected = {
+            "ensemble precision": f"{results['overall']['precision'] * 100:.1f}%",
+            "ensemble recall": f"{results['overall']['recall'] * 100:.1f}%",
+            "ensemble F1": f"{results['overall']['f1'] * 100:.1f}%",
+            "fired count": f"{results['overall']['tp'] + results['overall']['fp']:,}",
+        }
+        missing = {k: v for k, v in expected.items() if v not in readme}
+        assert not missing, f"README figures drifted from results_grounding.json: {missing}"
+
+    def test_decision_is_does_not_work(self, published):
+        """The README's framing ("still scored DOES_NOT_WORK") depends on this verdict -- a future
+        config change that flips it needs the surrounding prose rewritten, not silently republished."""
+        results, _ = published
+        assert results["decision"] == "DOES_NOT_WORK", (
+            "grounding ensemble's decision changed -- the README's grounding-checks section needs a "
+            "rewrite, not just new numbers")
+
+
 class TestMetrics:
     def test_wilson_stays_inside_the_unit_interval_at_the_extremes(self):
         """The Wald interval fails exactly here; this is the reason Wilson was chosen."""
