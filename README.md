@@ -107,7 +107,7 @@ enable_novelty_check=True)`):
   fabricated name), excluding common sentence-openers so ordinary capitalization from sentence
   position isn't mistaken for a name.
 - **`novel_content_window`** — a sliding window of stopword-filtered content words where the whole
-  window is absent from the evidence. The window size and novelty threshold (10 tokens, 100% novel)
+  window is absent from the evidence. The window size and novelty threshold (10 tokens, 60% novel)
   are the winner of a train-split-only grid search (`python benchmark/tune.py`) over window sizes
   3/5/7/10 and thresholds 0.6/0.8/1.0 — every other point scored lower on train.
 
