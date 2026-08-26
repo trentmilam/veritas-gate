@@ -1,9 +1,21 @@
-"""Fetch the RAGTruth corpus used by the benchmark.
+"""Fetch the RAGTruth corpus used by the benchmark, into a git-ignored local directory.
 
 The corpus is NOT vendored into this repository: it is third-party data with its own license and
 provenance, and it is 36 MB. Run this once before `benchmark/run.py`.
 
     python benchmark/fetch_data.py
+
+Output goes to benchmark/data/, which is git-ignored. Nothing this script downloads is ever
+committed, and it never writes into benchmark/fixtures/ -- the committed fixture is generated
+separately by benchmark/fixtures/build_synthetic_fixture.py and contains no corpus text.
+
+UPSTREAM TERMS APPLY TO YOU, NOT TO THIS REPOSITORY. RAGTruth is MIT (Copyright 2023 Particle
+Media), but it is a DERIVED corpus: its source passages come from CNN/DailyMail, MS MARCO and the
+Yelp Open Dataset. Those carry their own terms, which RAGTruth's MIT licence does not relicense --
+MS MARCO is non-commercial research use only and extends no IP rights; the Yelp Dataset Terms of
+Use are academic-only, revocable, and bar redistribution; the CNN/DailyMail article text remains
+the publishers' copyright. Fetching the corpus here is your act under those terms. See
+benchmark/DATA-PROVENANCE.md.
 
 Source: https://github.com/ParticleMedia/RAGTruth (Niu et al., "RAGTruth: A Hallucination Corpus
 for Developing Trustworthy Retrieval-Augmented Language Models").
@@ -75,6 +87,13 @@ def main() -> int:
 
         print(f"  verified {name} ({target.stat().st_size:,} bytes, sha256 matches commit "
               f"{CORPUS_COMMIT[:12]})")
+
+    print()
+    print(f"  Fetched into {DEST} (git-ignored; not redistributed by this repository).")
+    print("  RAGTruth is MIT (Particle Media) but derives from CNN/DailyMail, MS MARCO and the")
+    print("  Yelp Open Dataset, whose own terms govern your use of these files -- MS MARCO is")
+    print("  non-commercial research only, and the Yelp terms are academic-only and bar")
+    print("  redistribution. See benchmark/DATA-PROVENANCE.md.")
     return 0
 
 

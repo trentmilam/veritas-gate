@@ -9,8 +9,11 @@ instead with `python benchmark/dev_run.py` -- nothing there needs a reason, beca
 the number that gets published. See "TEST-SET ACCESS DISCIPLINE" below for why this exists.
 
 CI never runs this file with real data. It runs `python benchmark/run.py --fixture` against a small
-committed offline slice (see benchmark/fixtures/) so the harness LOGIC is checked on every push with
-no 36 MB download and no test-set access.
+committed SYNTHETIC fixture (see benchmark/fixtures/) so the harness LOGIC is checked on every push
+with no 36 MB download and no test-set access. The fixture is generated, not sampled: RAGTruth is a
+derived corpus whose source passages come from CNN/DailyMail, MS MARCO and the Yelp Open Dataset,
+each carrying upstream terms that RAGTruth's own MIT licence does not relicense, so no slice of it
+is committed here. Regenerate with `python benchmark/fixtures/build_synthetic_fixture.py`.
 
 WHAT THIS DOES AND DOES NOT MEASURE
 -----------------------------------
@@ -167,9 +170,10 @@ def load() -> tuple[list, dict]:
 
 
 def load_fixture() -> tuple[list, dict]:
-    """A small, committed, offline slice of the real test split -- see benchmark/fixtures/. No
-    network, no checksum against the pinned 36 MB corpus (different files entirely); regenerated
-    only by `benchmark/fixtures/build_fixture.py`, never by CI."""
+    """A small, committed, SYNTHETIC fixture -- see benchmark/fixtures/. Not a slice of the real
+    test split and not third-party text: it is generated so the harness logic can be checked
+    offline without redistributing corpus source passages. No network, no test-set access;
+    regenerated only by `benchmark/fixtures/build_synthetic_fixture.py`, never by CI."""
     responses = [json.loads(l) for l in (FIXTURES / "response_sample.jsonl").open(encoding="utf-8")]
     sources = {}
     for line in (FIXTURES / "source_info_sample.jsonl").open(encoding="utf-8"):
@@ -275,7 +279,8 @@ def score(test_rows: list, all_responses: list, sources: dict, *, min_sample: in
     return out
 
 
-def print_report(out: dict, *, title: str = "GENERIC-ONLY MODE (numeric groundedness)") -> None:
+def print_report(out: dict, *, title: str = "GENERIC-ONLY MODE (numeric groundedness)",
+                 fixture: bool = False) -> None:
     ceiling = out["digit_span_recall_ceiling"]
     overall = out["overall"]
     p_lo, p_hi = out["precision_wilson95"]
@@ -283,7 +288,8 @@ def print_report(out: dict, *, title: str = "GENERIC-ONLY MODE (numeric grounded
     f_lo, f_hi = out["f1_clustered_bootstrap95"]
 
     print("=" * 78)
-    print(f"veritas-gate on RAGTruth -- {title}")
+    corpus_name = "SYNTHETIC FIXTURE" if fixture else "RAGTruth"
+    print(f"veritas-gate on {corpus_name} -- {title}")
     print("=" * 78)
     print(f"test responses      : {out['n']} (measured)")
     print(f"source clusters     : {out['source_clusters']} (measured)")
@@ -384,7 +390,7 @@ def main(argv: "list[str] | None" = None) -> int:
     if out is None:
         return 2
 
-    print_report(out, title=title)
+    print_report(out, title=title, fixture=args.fixture)
     print()
     _print_published_baselines()
 

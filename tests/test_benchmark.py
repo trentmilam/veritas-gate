@@ -149,7 +149,7 @@ class TestFixture:
         assert (fx / "expected.json").exists()
 
     def test_fixture_meets_the_min_sample_floor(self):
-        """If this fails, benchmark/fixtures/build_fixture.py's STRIDE needs lowering -- a fixture
+        """If this fails, build_synthetic_fixture.py's N_RESPONSES needs raising -- a fixture
         under MIN_SAMPLE would silently stop exercising the real scoring path and only exercise
         BLOCKED, which defeats the whole point of this fixture."""
         responses, _ = harness.load_fixture()
@@ -450,3 +450,63 @@ class TestMetrics:
     @pytest.mark.parametrize("tp,fp,fn,expected", [(1, 1, 1, 0.5), (10, 0, 0, 1.0)])
     def test_f1(self, tp, fp, fn, expected):
         assert prf(tp, fp, fn)["f1"] == pytest.approx(expected)
+
+
+class TestFixtureCannotMasqueradeAsTheRealBenchmark:
+    """The offline fixture exercises harness logic. It must never become a published number.
+
+    These are the mechanical guarantees behind that sentence. Without them, a future refactor
+    could let `--fixture` write results.json, and a synthetic tp/fp/fn would silently be
+    published as a RAGTruth measurement -- which is a far worse failure than the fixture being
+    wrong, because it would be wrong AND look official.
+    """
+
+    def test_fixture_run_does_not_write_results_json(self, capsys):
+        before = (BENCH / "results.json").read_bytes()
+        before_g = (BENCH / "results_grounding.json").read_bytes()
+        assert harness.main(["--fixture"]) == 0
+        capsys.readouterr()
+        assert (BENCH / "results.json").read_bytes() == before,             "--fixture overwrote results.json; the published number is not fixture-derived"
+        assert (BENCH / "results_grounding.json").read_bytes() == before_g
+
+    def test_fixture_run_is_labelled_synthetic_not_ragtruth(self, capsys):
+        assert harness.main(["--fixture"]) == 0
+        out = capsys.readouterr().out
+        assert "SYNTHETIC FIXTURE" in out
+        assert "veritas-gate on RAGTruth" not in out,             "fixture output claims to be a RAGTruth run"
+
+    def test_real_run_without_reason_is_blocked(self, capsys):
+        """The corpus path stays gated; the fixture path must not become a way around it."""
+        assert harness.main([]) == 2
+        assert "BLOCKED" in capsys.readouterr().out
+
+    def test_published_results_carry_corpus_provenance_the_fixture_cannot_fake(self):
+        """results.json records a corpus commit. A fixture run has no corpus, so it cannot
+        produce this block -- which is what makes the two distinguishable after the fact."""
+        published = json.loads((BENCH / "results.json").read_text(encoding="utf-8"))
+        assert "provenance" in published
+        assert published["provenance"].get("corpus_commit")
+
+
+class TestFixtureCarriesNoThirdPartyCorpusText:
+    """A standing guard against re-vendoring restricted upstream text into the fixture.
+
+    The committed fixture is generated (benchmark/fixtures/build_synthetic_fixture.py). RAGTruth
+    is a derived corpus whose passages come from CNN/DailyMail, MS MARCO and the Yelp Open
+    Dataset, each with upstream terms that RAGTruth's own MIT licence does not relicense. This
+    test fails if corpus text reappears here.
+    """
+
+    MARKERS = ("Hollywood Reporter", "Billboard", "yelp", "Yelp", "CNN", "Daily Mail",
+               "dailymail", "MARCO", "(CNN)")
+
+    def test_fixture_files_contain_no_upstream_source_markers(self):
+        for name in ("source_info_sample.jsonl", "response_sample.jsonl"):
+            text = (BENCH / "fixtures" / name).read_text(encoding="utf-8")
+            for marker in self.MARKERS:
+                assert marker not in text, f"{name} contains upstream corpus marker {marker!r}"
+
+    def test_fixture_sources_are_declared_synthetic(self):
+        _, sources = harness.load_fixture()
+        for row in sources.values():
+            assert str(row.get("source", "")).startswith("Synthetic"),                 f"fixture row declares a non-synthetic source: {row.get('source')!r}"
