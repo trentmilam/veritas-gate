@@ -1,4 +1,4 @@
-"""Grounding checks (grounding.py) — the 79.2% of hallucination spans TC-3/TC-6 can't see."""
+"""Grounding checks (grounding.py): the 79.2% of hallucination spans TC-3/TC-6 can't see."""
 from __future__ import annotations
 
 from veritas_gate import TruthChecker
@@ -29,13 +29,13 @@ class TestBroadenedNumericUngrounded:
     def test_a_figure_ending_a_sentence_in_the_evidence_still_counts_as_grounded(self) -> None:
         """The digit regex is greedy, so a figure that ends a sentence tokenizes WITH its period
         ("...in 2019." -> "2019."). Without stripping that, the same figure mid-sentence in the
-        draft ("2019") compares unequal and a perfectly grounded number is reported as fabricated --
+        draft ("2019") compares unequal and a perfectly grounded number is reported as fabricated,
         a false positive manufactured entirely by punctuation."""
         assert broadened_numeric_ungrounded("Shipped in 2019 on schedule.",
                                             "The product shipped in 2019.") == []
 
     def test_an_internal_decimal_point_is_not_stripped(self) -> None:
-        """The trailing-punctuation strip must not turn 4.5 into 4 -- that would silently make two
+        """The trailing-punctuation strip must not turn 4.5 into 4: that would silently make two
         different figures compare equal, trading a false positive for a false negative."""
         assert broadened_numeric_ungrounded("Revenue was 4.5 million.", "Revenue was 4 million.") \
             == ["4.5"]
@@ -49,7 +49,7 @@ class TestUngroundedEntities:
         assert "Zorbex" in ungrounded_entities("Zorbex Industries acquired the team.", EVIDENCE)
 
     def test_common_sentence_opener_is_not_flagged_as_an_entity(self) -> None:
-        # "The" opens the sentence and is a common opener -- must not be treated as a proper noun.
+        # "The" opens the sentence and is a common opener; must not be treated as a proper noun.
         out = ungrounded_entities("The engineers shipped Falcon on time.", EVIDENCE)
         assert "The" not in out
 
@@ -60,7 +60,7 @@ class TestUngroundedEntities:
         assert "In" not in out
 
     def test_one_name_repeated_is_one_finding(self) -> None:
-        """A fabricated company named five times is one thing to fix -- five identical violations
+        """A fabricated company named five times is one thing to fix: five identical violations
         bury every other finding, the cap claim_rules.py states for a repeated phrase."""
         draft = "Zorbex led the deal. Zorbex grew fast. Zorbex hired many. Zorbex shipped it."
         assert ungrounded_entities(draft, EVIDENCE) == ["Zorbex"]
@@ -76,7 +76,7 @@ class TestUngroundedEntities:
         capitalization proxy, so a sentence-opening adverb outside the opener lexicon ("Later")
         reads as a proper noun. This is part of why the measured precision is 40.1%, and why the
         three grounding checks ship opt-in and off by default. Change this only by re-running
-        benchmark/tune.py -- never by adding words after eyeballing one example."""
+        benchmark/tune.py, never by adding words after eyeballing one example."""
         assert "Later" in ungrounded_entities("Later Zorbex hired Vashti.", EVIDENCE)
 
 
@@ -100,14 +100,14 @@ class TestNovelContentWindows:
         loose = novel_content_windows(draft, EVIDENCE, window=5, threshold=0.6)
         assert len(loose) >= len(strict)
 
-    # _WORD_RE matches letters only, so distinct filler tokens must be letter-only too -- "novel0"
+    # _WORD_RE matches letters only, so distinct filler tokens must be letter-only too: "novel0"
     # and "novel1" both tokenize to "novel".
     _FILLER_A = "quark zephyr mango trellis vortex nimbus cobalt saffron gantry plinth widget dovetail"
     _FILLER_B = "obelisk lantern harrow spindle thicket bramble cinder marrow rivet tundra fathom quill"
 
     def test_one_long_ungrounded_passage_is_one_finding_not_one_per_window(self) -> None:
         """A long ungrounded paragraph is one problem to fix. Reporting it once per sliding window
-        (51 near-identical violations for a 60-word passage) buries every other finding -- the same
+        (51 near-identical violations for a 60-word passage) buries every other finding, the same
         reasoning claim_rules.py gives for its one-finding-per-clause cap."""
         draft = f"{self._FILLER_A} {self._FILLER_B}"
         out = novel_content_windows(draft, "Nothing related here at all.", window=10, threshold=1.0)

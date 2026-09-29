@@ -7,7 +7,7 @@ corpus fetched by `benchmark/fetch_data.py` and scored by the scheduled benchmar
 workflow.
 
 Because the fixture only has to exercise the harness, it does not need to contain real corpus
-text -- and it should not. RAGTruth is a derived corpus whose source passages come from
+text, and it should not. RAGTruth is a derived corpus whose source passages come from
 CNN/DailyMail, MS MARCO and the Yelp Open Dataset, each carrying its own upstream terms that
 RAGTruth's repository-level MIT licence does not relicense. Committing a verbatim slice of
 those passages into this repository would redistribute third-party content this project has no
@@ -18,7 +18,7 @@ To rebuild the committed fixture:
 
     python benchmark/fixtures/build_synthetic_fixture.py
 
-To score the REAL corpus (the actual benchmark), fetch it first -- it is never committed:
+To score the REAL corpus (the actual benchmark), fetch it first; it is never committed:
 
     python benchmark/fetch_data.py
     python benchmark/run.py --reason "..."
@@ -133,7 +133,7 @@ def build_responses(rng: random.Random, sources: list[dict]) -> list[dict]:
     """Mix grounded and invented numeric claims so every scoring branch is exercised.
 
     A fixture where the checker never fires proves the harness RUNS but not that it
-    DISCRIMINATES -- tp/fp would both be 0 and the regression test would pass even if the
+    DISCRIMINATES: tp/fp would both be 0 and the regression test would pass even if the
     detector were deleted. So the mix is built deliberately to hit all four branches:
 
       A  ungrounded significant count + labelled  -> checker fires on a real hallucination (tp)
@@ -141,7 +141,7 @@ def build_responses(rng: random.Random, sources: list[dict]) -> list[dict]:
       C  labelled hallucination that is NOT count-noun-anchored -> checker stays silent  (fn)
       D  grounded figure, unlabelled              -> checker correctly stays silent (true neg)
 
-    Branch C is the honest majority, mirroring the real corpus: TC-3/TC-6 are resume-domain
+    Branch C is the majority here, mirroring the real corpus: TC-3/TC-6 are resume-domain
     digit matchers, so most annotated hallucinations in prose fall straight through them. That
     is the finding the benchmark exists to report, not a defect in the fixture.
     """

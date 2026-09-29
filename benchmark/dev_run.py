@@ -1,6 +1,6 @@
 """Score veritas-gate against the RAGTruth TRAIN split, for iteration.
 
-Never the test split -- this is where detector tuning happens, freely, with no access-log
+Never the test split. This is where detector tuning happens, freely, with no access-log
 discipline, because nothing here is the number that gets published. Same report shape as
 `benchmark/run.py`, so a new detector's numbers are directly comparable across scripts once it's
 frozen and run once, disciplined, against test.

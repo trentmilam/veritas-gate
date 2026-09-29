@@ -1,4 +1,4 @@
-"""Runnable 30-second demo on fake data — `python -m veritas_gate.example`.
+"""Runnable 30-second demo on fake data: `python -m veritas_gate.example`.
 
 Shows the three gates working together with ZERO private data: a fake evidence bank, a fake job
 description, one honest draft and one fabricated draft.
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from . import TruthChecker, is_degenerate, rubric_score
 
-# A fake "candidate" evidence bank — what the subject can genuinely back.
+# A fake "candidate" evidence bank: what the subject can genuinely back.
 EVIDENCE = (
     "Built a retrieval-augmented generation system over a 35,000+ document corpus that cut "
     "research time 85%. Stood up local model serving with llama.cpp and an OpenAI-compatible "

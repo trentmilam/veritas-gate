@@ -56,7 +56,7 @@
   0.6335571358766714
  ],
  "provenance": {
-  "checker_sha256": "c60cd33a960ac95ada7957273bb38ac2907f4e9cc914a09a020a94a9c8890f6e",
+  "checker_sha256": "a4b3bc0de187a9eb94e43aff224b3fcaf6a78c8fbc0350e403c30266b86c4c67",
   "corpus_commit": "c103204b9ce28d6bbad859304bf30de72b8ed8fe",
   "corpus_sha256": {
    "response.jsonl": "e4c2e4ac24fff676d8984cc61c35d791612fadc58015335d97dd632375e18073",

@@ -6,12 +6,12 @@ provenance, and it is 36 MB. Run this once before `benchmark/run.py`.
     python benchmark/fetch_data.py
 
 Output goes to benchmark/data/, which is git-ignored. Nothing this script downloads is ever
-committed, and it never writes into benchmark/fixtures/ -- the committed fixture is generated
+committed, and it never writes into benchmark/fixtures/: the committed fixture is generated
 separately by benchmark/fixtures/build_synthetic_fixture.py and contains no corpus text.
 
 UPSTREAM TERMS APPLY TO YOU, NOT TO THIS REPOSITORY. RAGTruth is MIT (Copyright 2023 Particle
 Media), but it is a DERIVED corpus: its source passages come from CNN/DailyMail, MS MARCO and the
-Yelp Open Dataset. Those carry their own terms, which RAGTruth's MIT licence does not relicense --
+Yelp Open Dataset. Those carry their own terms, which RAGTruth's MIT licence does not relicense:
 MS MARCO is non-commercial research use only and extends no IP rights; the Yelp Dataset Terms of
 Use are academic-only, revocable, and bar redistribution; the CNN/DailyMail article text remains
 the publishers' copyright. Fetching the corpus here is your act under those terms. See
@@ -24,8 +24,8 @@ PINNED, NOT "main". A benchmark whose entire claim is reproducibility cannot fet
 upstream could rename it, force-push it, or delete the repo, and "reproduce it" would silently
 reproduce something else, or nothing. CORPUS_COMMIT below is an explicit commit SHA, confirmed via
 `git ls-remote https://github.com/ParticleMedia/RAGTruth main` on 2026-08-08. CHECKSUMS are SHA-256
-over the exact bytes served at that commit, computed the same day. Every fetch -- and every load, in
-benchmark/run.py -- re-verifies against these, and ABORTS rather than proceeding on any mismatch: a
+over the exact bytes served at that commit, computed the same day. Every fetch, and every load, in
+benchmark/run.py, re-verifies against these, and ABORTS rather than proceeding on any mismatch: a
 silently-swapped or corrupted corpus is worse than no corpus at all.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ FILES = ("response.jsonl", "source_info.jsonl")
 DEST = Path(__file__).resolve().parent / "data"
 
 # sha256 over the exact bytes at CORPUS_COMMIT, computed 2026-08-08. Bumping CORPUS_COMMIT is a
-# deliberate, reviewable, one-line-plus-checksums diff -- never an invisible moving target.
+# deliberate, reviewable, one-line-plus-checksums diff; never an invisible moving target.
 CHECKSUMS = {
     "response.jsonl": "e4c2e4ac24fff676d8984cc61c35d791612fadc58015335d97dd632375e18073",
     "source_info.jsonl": "0dffc26ea9f3c1c3d7c7e8336b56ef1646e3cec876edffcca3c9c624d12d578b",
@@ -58,7 +58,7 @@ def _sha256(path: Path) -> str:
 
 def verify(name: str, path: Path) -> bool:
     """True if ``path`` exists and its sha256 matches the pinned checksum for ``name``. Does not
-    fetch anything -- callers (including benchmark/run.py's ``load()``) use this to re-check a file
+    fetch anything; callers (including benchmark/run.py's ``load()``) use this to re-check a file
     that was already downloaded, so a swap or corruption after a successful fetch is still caught."""
     return name in CHECKSUMS and path.exists() and _sha256(path) == CHECKSUMS[name]
 

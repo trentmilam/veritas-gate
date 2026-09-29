@@ -1,4 +1,4 @@
-"""is_degenerate — repetition-runaway detector."""
+"""is_degenerate: repetition-runaway detector."""
 from __future__ import annotations
 
 from veritas_gate import is_degenerate

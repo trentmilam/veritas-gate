@@ -26,7 +26,7 @@ from .grounding import broadened_numeric_ungrounded, novel_content_windows, ungr
 _CREDENTIAL_TOKENS = "CFA|PMP|FRM|CGA|CEP|CPA|CISA|CISSP"
 
 # Spelled-out credential names mapped to their core token, so a fabricated credential written out
-# in full ('Certified Public Accountant') is caught too — not only the abbreviation.
+# in full ('Certified Public Accountant') is caught too, not only the abbreviation.
 _CREDENTIAL_FULL = {
     "cfa": "chartered financial analyst",
     "cpa": "certified public accountant",
@@ -38,8 +38,8 @@ _CREDENTIAL_FULL = {
     "cep": "certified equity professional",
 }
 
-# Phrases that mark an HONEST omission/disclosure footnote — the model disclosing what it
-# intentionally left OUT for lack of evidence ("Kubernetes: omitted — no verified experience",
+# Phrases that mark an HONEST omission/disclosure footnote: the model disclosing what it
+# intentionally left OUT for lack of evidence ("Kubernetes: omitted, no verified experience",
 # "EVIDENCE FLAGS: AWS/GCP not in evidence"). Naming a not-claimable skill INSIDE such a line is a
 # truthful disclosure, NOT an affirmative claim, so the forbidden-skill gate must skip it. Without
 # this, the gate hard-blocks honest drafts (e.g. a résumé falls back to a weaker variant because its
@@ -61,7 +61,7 @@ def _is_omission_line(claim_lower: str) -> bool:
 
 # Hyphen/dash variants a model or user might use to reword a forbidden phrase. Normalized to a
 # single space so 'cloud-native', 'cloud native', 'cloud‑native' (non-breaking hyphen) and
-# 'cloud–native' (en-dash) all compare equal — a hyphen swap alone must not evade the gate.
+# 'cloud–native' (en-dash) all compare equal, so a hyphen swap alone must not evade the gate.
 _DASH_CHARS = "-‐‑‒–—―−"
 _DASH_RE = re.compile(rf"[{_DASH_CHARS}]")
 
@@ -74,7 +74,7 @@ def _normalize_phrase(text: str) -> str:
 
 
 def _digits_in(text: str) -> set:
-    """All numeric tokens in ``text`` (comma/space-stripped digit runs) — for matching the
+    """All numeric tokens in ``text`` (comma/space-stripped digit runs), for matching the
     impact metrics in a draft against the figures that actually appear in the evidence."""
     return {re.sub(r"[,\s]", "", t) for t in re.findall(r"\d[\d.,]*", text or "")}
 
@@ -83,8 +83,8 @@ _CLAUSE_SPLIT = re.compile(r"[.;\n!?]")
 
 
 def _clause_at(text: str, pos: int) -> str:
-    """The sentence/clause of ``text`` containing character offset ``pos`` (split on . ; ! ? newline)
-    — so an omission disclosure in one sentence can't whitelist an affirmative claim in another."""
+    """The sentence/clause of ``text`` containing character offset ``pos`` (split on . ; ! ? newline),
+    so an omission disclosure in one sentence can't whitelist an affirmative claim in another."""
     return _clause_around(text, pos, _CLAUSE_SPLIT)
 
 
@@ -106,7 +106,7 @@ def _clause_around(text: str, pos: int, splitter: re.Pattern) -> str:
 _OMISSION_CLAUSE_SPLIT = re.compile(r"[.;\n!?,]")
 
 # Affirmative-competence words. When one of these shares the skill's omission-clause, the mention is
-# an AFFIRMATIVE claim, not an honest omission — so the omission whitelist must not apply even if a
+# an AFFIRMATIVE claim, not an honest omission, so the omission whitelist must not apply even if a
 # marker is co-present ('Expert in Kubernetes and eager to learn', 'gaps in my Kubernetes expertise').
 # Word-boundary matched; 'experience'/'experienced' are deliberately absent so the
 # 'no experience with X' disclosure marker itself is not mistaken for an affirmative claim.
@@ -136,7 +136,7 @@ _CREDENTIAL_ASPIRATIONAL = re.compile(
 
 
 def _held_credentials_in(text: str) -> set:
-    """Credentials the evidence says are actually HELD — a mention inside an aspirational/negative
+    """Credentials the evidence says are actually HELD; a mention inside an aspirational/negative
     clause is excluded, so 'studying for the CPA exam' does not whitelist a 'licensed CPA' claim."""
     held: set = set()
     for m in re.finditer(rf"\b({_CREDENTIAL_TOKENS})\b", text or "", re.IGNORECASE):
@@ -152,7 +152,7 @@ def _held_credentials_in(text: str) -> set:
 
 def _credential_is_disclosed(text: str, pos: int) -> bool:
     """True when a credential mention at offset ``pos`` sits in an aspirational ('studying for the
-    CFA exam') OR honest-omission ('I do not have a CPA', 'No verified PMP') clause — i.e. NOT an
+    CFA exam') OR honest-omission ('I do not have a CPA', 'No verified PMP') clause, i.e. NOT an
     affirmative claim to hold it. Mirrors the evidence-side aspirational filter plus the
     forbidden-skill omission whitelist, so an honest disclosure of a not-held credential does not
     hard-fail a truthful draft."""
@@ -161,7 +161,7 @@ def _credential_is_disclosed(text: str, pos: int) -> bool:
 
 
 def _claimed_credentials_in(text: str) -> set:
-    """Core credential tokens AFFIRMATIVELY CLAIMED in ``text`` — a mention inside an aspirational or
+    """Core credential tokens AFFIRMATIVELY CLAIMED in ``text``; a mention inside an aspirational or
     honest-omission clause is excluded (see _credential_is_disclosed). Used on the draft side so
     honest disclosures of a not-held credential are not flagged as fabricated."""
     claimed: set = set()
@@ -195,7 +195,7 @@ def _impact_metrics(text: str) -> list:
 
 
 # TC-6 (counts): a draft can state a fabricated/stale plain COUNT ("23,000+ postings",
-# "250+ automated tests", "35,000 documents") that the %/$/multiplier impact gate never sees —
+# "250+ automated tests", "35,000 documents") that the %/$/multiplier impact gate never sees,
 # so "Valid: Yes, 0 violations" while a number is wrong. These count-nouns mark a number as a
 # significant magnitude claim that MUST trace to the evidence.
 _COUNT_NOUNS = (
@@ -211,14 +211,14 @@ _COUNT_NOUNS = (
 )
 # A number (with optional thousands separators / decimal) followed by an optional +/k/K suffix and
 # then a count-noun, allowing up to two intervening modifier words ("250+ automated tests",
-# "35,000+ source documents") — e.g. "28,701 postings", "32k LOC". Conservative: requires the
+# "35,000+ source documents"), e.g. "28,701 postings", "32k LOC". Conservative: requires the
 # count-noun, so years/phone numbers/bare integers are not matched. The modifier run is
 # letter-only (no digits) so it can't swallow a second number.
 _COUNT_RE = re.compile(
     rf"(\d[\d.,]*)\s*([+kK]?)\s+(?:of\s+)?(?:[A-Za-z][A-Za-z-]*\s+){{0,2}}({'|'.join(_COUNT_NOUNS)})\b",
     re.IGNORECASE,
 )
-# A year (1900-2099) standing on its own — excluded so "graduated in 2025" never flags. Only used
+# A year (1900-2099) standing on its own is excluded so "graduated in 2025" never flags. Only used
 # to skip the bare-year case where the digits happen to precede a count-noun by coincidence.
 _YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 
@@ -274,8 +274,8 @@ def _significant_counts(text: str) -> list:
 
 
 def _evidence_count_index(text: str) -> set:
-    """The set of normalized count cores present in ``text`` — every numeric token, plus its
-    k-expanded form when 'k'-suffixed — so a draft's 'Nk' or 'N,000' matches an evidence figure
+    """The set of normalized count cores present in ``text``: every numeric token, plus its
+    k-expanded form when 'k'-suffixed, so a draft's 'Nk' or 'N,000' matches an evidence figure
     regardless of which notation the evidence used."""
     index: set = set()
     for raw in _digits_in(text):
@@ -289,7 +289,7 @@ def _evidence_count_index(text: str) -> set:
 
 # Attribution (TC-5): flag a SELF-DIRECTED / personal-project signature listed under an EMPLOYER
 # block (implying the employer owns work it didn't). Both marker sets are caller-supplied
-# (constructor params, default empty -> the check is inert); the self-header markers below are
+# (constructor params, default empty, so the check is inert); the self-header markers below are
 # generic and let the walker tell an employer section from a self-directed one.
 _SELF_HEADER_MARKERS = (
     "self-directed", "self directed", "personal project", "independent",
@@ -299,7 +299,7 @@ _SELF_HEADER_MARKERS = (
 
 def _attribution_violation(draft_text, employer_markers, self_project_markers) -> Optional[str]:
     """Return the offending line if a self-directed-project signature (``self_project_markers``)
-    appears UNDER an employer block (``employer_markers``) — after an employer header with no
+    appears UNDER an employer block (``employer_markers``), after an employer header with no
     self-directed sub-header since. Returns None when clean, or when either marker set is empty.
     Walks sections by header line."""
     if not employer_markers or not self_project_markers:
@@ -387,25 +387,25 @@ class TruthChecker:
         self.experience_evidence = experience_evidence
         self.resume_blocks = resume_blocks
         self.forbidden_claims = forbidden_claims
-        # Attribution (TC-5) markers, caller-supplied. Default empty -> the check is inert.
+        # Attribution (TC-5) markers, caller-supplied. Default empty, so the check is inert.
         self._employer_markers = tuple(employer_markers or ())
         self._self_project_markers = tuple(self_project_markers or ())
         # Grounding checks (grounding.py) for the 79.2% of hallucination spans TC-3/TC-6 can't see
-        # (no digit). Opt-in, default OFF -- unlike TC-3/TC-6 these are broader, noisier literal-
+        # (no digit). Opt-in, default OFF: unlike TC-3/TC-6 these are broader, noisier literal-
         # token-presence tests, not yet proven at the precision/recall bar TC-3/TC-6 clear alone. See
         # benchmark/README for the measured numbers before enabling any of these on real drafts.
         self._enable_broadened_numeric = enable_broadened_numeric
         self._enable_entity_grounding = enable_entity_grounding
         self._enable_novelty_check = enable_novelty_check
-        # The declarative claim registry (claim_rules.py) -- nearest-marker attribution and
+        # The declarative claim registry (claim_rules.py): nearest-marker attribution and
         # closed-phrase bans a caller defines as data, not code. A path, a JSON string, or an
-        # already-parsed list; load_rules() accepts all three. Default None -> inert, matching
+        # already-parsed list; load_rules() accepts all three. Default None is inert, matching
         # every other caller-configured gate here.
         self._claim_rules = load_rules(claim_rules) if claim_rules else ()
 
         # Whitespace- AND hyphen-normalized so a re-spaced ('active   secret clearance') or
         # re-hyphenated ('cloud native' vs 'cloud-native') forbidden phrase can't bypass the
-        # substring match — the claim is normalized the same way
+        # substring match. The claim is normalized the same way
         # in check().
         self._forbidden_phrases: list[str] = [
             _normalize_phrase(line.lower())
@@ -489,7 +489,7 @@ class TruthChecker:
 
             # Only AFFIRMATIVE mentions of a not-claimable skill are violations (TC-1): an honest
             # "I omitted X / no verified experience with X" disclosure must not trip the gate. The
-            # omission test is per-CLAUSE (the sentence containing the skill), NOT per-line — a
+            # omission test is per-CLAUSE (the sentence containing the skill), NOT per-line: a
             # separate omission sentence on the same line must not whitelist an affirmative claim
             # (previously, "expert in Kubernetes. I have yet to work on mobile." slipped through).
             for skill in self._forbidden_skills:
@@ -507,7 +507,7 @@ class TruthChecker:
 
             # Credential claims by abbreviation OR spelled-out full name (a fabricated
             # "Certified Public Accountant" written out in full would otherwise bypass the
-            # abbreviation-only check). Only AFFIRMATIVELY CLAIMED credentials count — an honest
+            # abbreviation-only check). Only AFFIRMATIVELY CLAIMED credentials count: an honest
             # aspirational/omission disclosure ('studying for the CFA', 'I do not have a CPA') must
             # not hard-fail a truthful draft.
             for core in sorted(_claimed_credentials_in(claim)):
@@ -551,7 +551,7 @@ class TruthChecker:
                                 suggestion=f"Skill '{skill}' may need evidence support.",
                             )
 
-        # TC-5: a self-directed/personal project listed under an employer block (HIGH — implies the
+        # TC-5: a self-directed/personal project listed under an employer block (HIGH: implies the
         # employer owns work it didn't). Inert unless the caller supplied both marker sets.
         offending = _attribution_violation(
             draft_text, self._employer_markers, self._self_project_markers)
@@ -580,7 +580,7 @@ class TruthChecker:
                 )
 
         # TC-6: surface a significant plain COUNT ("23,000+ postings", "250+ tests", "35,000
-        # documents") whose numeric core isn't in the evidence figure index — the class of overclaim
+        # documents") whose numeric core isn't in the evidence figure index: the class of overclaim
         # the %/$/multiplier gate never sees. NON-blocking (medium): a fabricated/stale count is
         # caught in the cockpit's truth warnings before sending, without hard-failing a truthful draft.
         for token, core in _significant_counts(draft_text):

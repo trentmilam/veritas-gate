@@ -18,27 +18,27 @@ python benchmark/run.py --reason "..."  # scores the fetched corpus
 
 | | source data | what it measures | writes `results.json`? |
 |---|---|---|---|
-| `python benchmark/run.py` | the RAGTruth corpus fetched into `benchmark/data/` | generic-grounding performance — every published number | yes |
+| `python benchmark/run.py` | the RAGTruth corpus fetched into `benchmark/data/` | generic-grounding performance: every published number | yes |
 | `python benchmark/run.py --fixture` | the committed synthetic fixture | loader, harness and scoring branches only | **no, never** |
 
 The fixture exists so CI can exercise the harness on every push without a 36 MB download and
 without touching the test split. Its `tp/fp/fn` are properties of generated data and are not a
 measurement of anything external. The `--fixture` path never writes `results.json`, labels its
 output `SYNTHETIC FIXTURE`, and cannot produce the `provenance.corpus_commit` block that a real
-run records — tests in `tests/test_benchmark.py` enforce each of those.
+run records. Tests in `tests/test_benchmark.py` enforce each of those.
 
 Every published benchmark number comes from the fetched corpus.
 
 ## Upstream terms
 
 RAGTruth is MIT-licensed (Copyright 2023 Particle Media), and that licence covers the corpus
-authors' own work: their annotations and code. RAGTruth is a derived corpus — it incorporates
+authors' own work: their annotations and code. RAGTruth is a derived corpus: it incorporates
 passages originating from CNN/DailyMail, MS MARCO, the Yelp Open Dataset, and news sources.
 
 | upstream source | terms that govern the passages |
 |---|---|
 | CNN/DailyMail | article text remains the publishers' copyright; the Apache-2.0 and MIT licences in that lineage cover the collection and processing scripts |
-| Yelp Open Dataset | Yelp Dataset Terms of Use — academic use, revocable, and restricting redistribution |
+| Yelp Open Dataset | Yelp Dataset Terms of Use: academic use, revocable, and restricting redistribution |
 | MS MARCO | non-commercial research use, "without extending any license or other intellectual property rights" |
 | news sources | publisher copyright |
 

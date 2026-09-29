@@ -3,7 +3,7 @@
 claim_rules.py's module docstring and the README cite a finding from 2026: matching a short,
 common term as a bare substring (no word boundary) over a private 9,963-document corpus produced a
 31.9x blast radius versus the equivalent word-boundary regex. That number is real but not
-reproducible here -- the corpus is private, real personal application data, never vendored into
+reproducible here: the corpus is private, real personal application data, never vendored into
 this public repo.
 
 What IS reproducible is the mechanism. Substring-without-word-boundary over-firing inside longer
@@ -17,7 +17,7 @@ anything private.
     python benchmark/registry_blast_radius.py --root <path>      # private mode, opt-in only
 
 PRIVATE MODE (--root): scans local files under the given directory instead of RAGTruth. Never the
-default. Prints and returns AGGREGATE COUNTS ONLY -- no document text, no file paths, no snippets --
+default. Prints and returns AGGREGATE COUNTS ONLY: no document text, no file paths, no snippets,
 and refuses to run against this repository's own tree.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ RESULT_PATH = HERE / "registry_blast_radius.json"
 
 # The same class of hazard the private-corpus finding measured: a short, common substring that sits
 # inside many unrelated longer words. "rl" is a general property of English, not specific to any one
-# corpus -- it appears inside world, girl, early, hourly, quarterly, curl, hurl, swirl, twirl...
+# corpus; it appears inside world, girl, early, hourly, quarterly, curl, hurl, swirl, twirl...
 DEFAULT_TERM = "rl"
 
 _WORD_RE = re.compile(r"[A-Za-z']+")
@@ -88,7 +88,7 @@ def _public_mode() -> dict:
 def _private_mode(root: Path, term: str) -> dict:
     resolved = root.resolve()
     # Block in BOTH directions: --root inside/equal to the repo, and --root an ANCESTOR of the repo
-    # (which would walk straight into it via rglob) -- checking only the first direction lets
+    # (which would walk straight into it via rglob); checking only the first direction lets
     # `--root <parent-of-this-repo>` sail through and scan this repo's own tree anyway.
     if (resolved == REPO_ROOT or REPO_ROOT in resolved.parents
             or resolved in REPO_ROOT.parents):
@@ -104,7 +104,7 @@ def _private_mode(root: Path, term: str) -> dict:
     out = blast_radius(texts, term)
     # AGGREGATE COUNTS ONLY, per this module's own privacy guarantee: strip any field that carries
     # words/text extracted verbatim from the caller's private files before it ever leaves this
-    # function -- returned to a caller AND printed by main(), so redacting only at print time would
+    # function: returned to a caller AND printed by main(), so redacting only at print time would
     # still leak through the return value.
     out["example_containing_words"] = None
     return out
@@ -132,13 +132,13 @@ def main(argv: "list[str] | None" = None) -> int:
         out = _public_mode()
         # Committed like results.json/results_grounding.json, so the README's cited figures (and
         # TestRegistryBlastRadius) can be checked against a public-mode run without a live corpus
-        # fetch on every CI run -- only public-mode output is ever persisted, never a --root scan.
+        # fetch on every CI run; only public-mode output is ever persisted, never a --root scan.
         RESULT_PATH.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         print(f"wrote benchmark/{RESULT_PATH.name}")
 
     print(json.dumps(out, indent=1))
     print()
-    # example_containing_words is redacted (None) in private mode -- see _private_mode's own
+    # example_containing_words is redacted (None) in private mode; see _private_mode's own
     # AGGREGATE-COUNTS-ONLY comment. Never format it into the summary in that case.
     words = out["example_containing_words"]
     examples = f", purely from words like: {', '.join(words[:8])}" if words else ""

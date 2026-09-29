@@ -3,8 +3,8 @@
 Two of the benchmark's headline claims are properties of the harness, not of the corpus, so they
 are testable without the 36 MB download and run in CI:
 
-    determinism   -- the reported numbers must reproduce exactly, including the error bars
-    BLOCKED       -- an undersized sample must yield no quality number at all
+    determinism   : the reported numbers must reproduce exactly, including the error bars
+    BLOCKED       : an undersized sample must yield no quality number at all
 
 Everything here uses synthetic rows. Nothing skips when the corpus is absent, because a test that
 quietly skips is how an untested claim ships.
@@ -29,7 +29,7 @@ def _rows(n_clusters: int = 40, per_cluster: int = 6) -> list[dict]:
     """Deterministic synthetic rows with a mix of tp, fp, fn and tn.
 
     Clusters must be HETEROGENEOUS. An earlier version keyed pred/gold on ``(c + i)`` mod small
-    primes, which gave every cluster an identical 1/1/2 tp/fp/fn split -- and F1 is scale-invariant,
+    primes, which gave every cluster an identical 1/1/2 tp/fp/fn split, and F1 is scale-invariant,
     so every bootstrap resample returned the same value and the interval collapsed to a point. The
     seed test below is what caught it, which is the reason that test exists.
     """
@@ -96,7 +96,7 @@ class TestBlockedPath:
 
 
 class TestAccessDiscipline:
-    """A run against the real test split is deliberately rare and deliberately visible -- see the
+    """A run against the real test split is deliberately rare and deliberately visible; see the
     module docstring's "TEST-SET ACCESS DISCIPLINE" section. These pin the two halves of that: the
     gate can't be bypassed, and the fixture path (which never touches the real split) needs none of
     it."""
@@ -106,7 +106,7 @@ class TestAccessDiscipline:
             raise AssertionError("load() must never run when --reason was not given")
         monkeypatch.setattr(harness, "load", _must_not_be_called)
 
-        assert harness.main([]) == 2   # must not raise -- proves load() was never reached
+        assert harness.main([]) == 2   # must not raise; proves load() was never reached
         out = capsys.readouterr().out
         assert "BLOCKED" in out
         assert "--reason" in out
@@ -137,7 +137,7 @@ class TestAccessDiscipline:
 
 
 class TestFixture:
-    """The committed offline slice CI actually runs against every push -- no network, no test-set
+    """The committed offline slice CI actually runs against every push: no network, no test-set
     access. It exists to catch a harness-LOGIC bug (evidence serialization, the violation filter, the
     metric formulas) that a README-text-diff test cannot: something with real corpus shape, scored on
     every push, for free."""
@@ -149,7 +149,7 @@ class TestFixture:
         assert (fx / "expected.json").exists()
 
     def test_fixture_meets_the_min_sample_floor(self):
-        """If this fails, build_synthetic_fixture.py's N_RESPONSES needs raising -- a fixture
+        """If this fails, build_synthetic_fixture.py's N_RESPONSES needs raising: a fixture
         under MIN_SAMPLE would silently stop exercising the real scoring path and only exercise
         BLOCKED, which defeats the whole point of this fixture."""
         responses, _ = harness.load_fixture()
@@ -176,7 +176,7 @@ class TestFixture:
         test = [r for r in responses if r.get("split") == "test"]
         out1 = harness.score(test, responses, sources)
         out2 = harness.score(test, responses, sources)
-        # _timing is wall-clock and deliberately excluded from the determinism claim -- see the
+        # _timing is wall-clock and deliberately excluded from the determinism claim; see the
         # comment on score()'s `out["_timing"]` assignment in run.py.
         persisted1 = {k: v for k, v in out1.items() if k != "_timing"}
         persisted2 = {k: v for k, v in out2.items() if k != "_timing"}
@@ -223,7 +223,7 @@ class TestProvenance:
         """The gate must answer "did the detector change?", not "what line endings does this
         checkout use?". `.gitattributes` normalizes to LF in the repo, so a Windows working tree
         holding CRLF and a fresh Linux CI checkout holding LF see byte-DIFFERENT, content-IDENTICAL
-        source. Hashing raw bytes made those two hash differently -- so CI would have failed the
+        source. Hashing raw bytes made those two hash differently, so CI would have failed the
         provenance assertion on a file nobody edited, on the very first push, while the real
         question went unanswered."""
         body = "def check():\n    return 1\n"
@@ -234,7 +234,7 @@ class TestProvenance:
         assert harness._file_hash(lf) == harness._file_hash(crlf)
 
     def test_the_hash_still_changes_when_the_source_actually_changes(self, tmp_path):
-        """The other half of the contract -- normalizing line endings must not have blunted the
+        """The other half of the contract: normalizing line endings must not have blunted the
         gate into ignoring a real edit."""
         a, b = tmp_path / "a.py", tmp_path / "b.py"
         a.write_bytes(b"def check():\n    return 1\n")
@@ -244,7 +244,7 @@ class TestProvenance:
 
 class TestDecisionRule:
     """The tiering rule was written BEFORE any new detector was measured against the real test
-    split -- these pin the rule's own behaviour, independent of any particular result."""
+    split: these pin the rule's own behaviour, independent of any particular result."""
 
     def test_matches_the_conclusion_already_published_before_this_rule_existed(self):
         """Today's committed numbers: P 50.0 [36.6,63.4], R 2.7 [1.8,3.9], F1 5.0 [3.3,7.1], naive
@@ -287,7 +287,7 @@ class TestScopeGuards:
 class TestPublishedNumbersMatchTheResultsFile:
     """The README publishes figures a reader cannot recompute without the 36 MB corpus. A repo whose
     subject is unsupported claims should not let its own published numbers drift from the machine-
-    readable output that produced them -- that is the exact defect this codebase exists to catch.
+    readable output that produced them; that is the exact defect this codebase exists to catch.
     """
 
     @pytest.fixture
@@ -319,7 +319,7 @@ class TestPublishedNumbersMatchTheResultsFile:
         assert not missing, f"README figures drifted from results.json: {missing}"
 
     def test_the_readme_does_not_claim_to_beat_the_trivial_floor(self, published):
-        """Guards the direction of the honest headline, not just the digits."""
+        """Guards the direction of the headline claim, not just the digits."""
         results, readme = published
         beats = results["overall"]["f1"] > results["naive_always_positive_f1"]
         assert not beats, "measurement changed -- the README's 'do not beat' framing needs a rewrite"
@@ -328,7 +328,7 @@ class TestPublishedNumbersMatchTheResultsFile:
 
 class TestGroundingNumbersMatchTheResultsFile:
     """Same drift guard as TestPublishedNumbersMatchTheResultsFile, for the grounding
-    ensemble's own results file -- a second published number is a second place drift can hide."""
+    ensemble's own results file: a second published number is a second place drift can hide."""
 
     @pytest.fixture
     def published(self) -> tuple[dict, str]:
@@ -352,7 +352,7 @@ class TestGroundingNumbersMatchTheResultsFile:
         assert not missing, f"README figures drifted from results_grounding.json: {missing}"
 
     def test_decision_is_does_not_work(self, published):
-        """The README's framing ("still scored DOES_NOT_WORK") depends on this verdict -- a future
+        """The README's framing ("still scored DOES_NOT_WORK") depends on this verdict; a future
         config change that flips it needs the surrounding prose rewritten, not silently republished."""
         results, _ = published
         assert results["decision"] == "DOES_NOT_WORK", (
@@ -363,7 +363,7 @@ class TestGroundingNumbersMatchTheResultsFile:
         """The same content-hash gate TestProvenance applies to results.json, applied to the
         grounding detector's own file over its own file set (GROUNDING_FILES, which adds
         grounding.py). Without this, a grounding.py edit could ship with a stale
-        results_grounding.json and nothing would fail -- the published number silently describing
+        results_grounding.json and nothing would fail: the published number silently describing
         code that no longer exists. Found exactly that way: grounding.py changed, every test still
         passed, because the only provenance assertion covered the OTHER results file."""
         results, _ = published
@@ -376,7 +376,7 @@ class TestGroundingNumbersMatchTheResultsFile:
 
 
 class TestRegistryBlastRadius:
-    """registry_blast_radius.py -- the reproducible public replacement for the unreproducible
+    """registry_blast_radius.py: the reproducible public replacement for the unreproducible
     private 9,963-document claim (see claim_rules.py / README's claim-registry section)."""
 
     def test_a_term_that_never_stands_alone_has_zero_true_positives(self):
@@ -402,14 +402,14 @@ class TestRegistryBlastRadius:
             rbr._private_mode(ROOT, "rl")
 
     def test_private_mode_refuses_an_ancestor_of_this_repository_too(self):
-        """A --root above the repo would walk INTO it via rglob just as surely as --root AT it --
+        """A --root above the repo would walk INTO it via rglob just as surely as --root AT it:
         the guard has to block both directions, not just root-inside-repo."""
         import registry_blast_radius as rbr
         with pytest.raises(SystemExit):
             rbr._private_mode(ROOT.parent, "rl")
 
     def test_private_mode_never_returns_extracted_document_words(self, tmp_path):
-        """AGGREGATE COUNTS ONLY is this mode's whole reason to exist -- example_containing_words
+        """AGGREGATE COUNTS ONLY is this mode's whole reason to exist: example_containing_words
         carries literal words pulled from the caller's private files and must never survive into
         the returned dict, which is what both main()'s print and any programmatic caller see."""
         import registry_blast_radius as rbr
@@ -421,7 +421,7 @@ class TestRegistryBlastRadius:
 
     def test_committed_result_matches_the_readme_figure(self):
         """The README cites a specific measured count from a committed public-mode run (like
-        results.json) -- no live corpus fetch needed here, matching every other drift-guard test."""
+        results.json), no live corpus fetch needed here, matching every other drift-guard test."""
         import registry_blast_radius as rbr
         if not rbr.RESULT_PATH.exists():
             pytest.fail("benchmark/registry_blast_radius.json is committed alongside the README; "
@@ -457,7 +457,7 @@ class TestFixtureCannotMasqueradeAsTheRealBenchmark:
 
     These are the mechanical guarantees behind that sentence. Without them, a future refactor
     could let `--fixture` write results.json, and a synthetic tp/fp/fn would silently be
-    published as a RAGTruth measurement -- which is a far worse failure than the fixture being
+    published as a RAGTruth measurement, which is a far worse failure than the fixture being
     wrong, because it would be wrong AND look official.
     """
 
@@ -482,7 +482,7 @@ class TestFixtureCannotMasqueradeAsTheRealBenchmark:
 
     def test_published_results_carry_corpus_provenance_the_fixture_cannot_fake(self):
         """results.json records a corpus commit. A fixture run has no corpus, so it cannot
-        produce this block -- which is what makes the two distinguishable after the fact."""
+        produce this block, which is what makes the two distinguishable after the fact."""
         published = json.loads((BENCH / "results.json").read_text(encoding="utf-8"))
         assert "provenance" in published
         assert published["provenance"].get("corpus_commit")

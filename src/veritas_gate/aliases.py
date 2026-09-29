@@ -3,10 +3,10 @@
 The scorer, the curation gates, and the ATS fortifier all matched job text by raw
 substring (``keyword in text``), which had two failure modes:
 
-* **missed synonyms** — a JD that said "k8s" never matched the keyword "kubernetes",
+* missed synonyms: a JD that said "k8s" never matched the keyword "kubernetes",
   "retrieval-augmented generation" never matched "rag", "large language models" never
   matched "llm";
-* **false hits** — a short keyword bled into a longer word: "engine" matched
+* false hits, where a short keyword bled into a longer word: "engine" matched
   "engineer", "ms" matched "teams", "scala" matched "scalable".
 
 This module fixes both with one small, deterministic, offline primitive:
@@ -22,8 +22,8 @@ widen recall via the an ``Embedder`` seam without touching this
 precise, auditable core.
 
 Public API:
-    ``term_in(term, text) -> bool``        — is term (or any alias) present, boundary-safe?
-    ``surface_forms(term) -> tuple``       — the full alias family for term (incl. itself)
+    ``term_in(term, text) -> bool``        : is term (or any alias) present, boundary-safe?
+    ``surface_forms(term) -> tuple``       : the full alias family for term (incl. itself)
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ import re
 
 # Each tuple is one equivalence family; the FIRST entry is the canonical label. Every form
 # is matched on word boundaries, so the short ones are safe. Keep this conservative and
-# auditable — only add a synonym you would defend as genuinely the same skill.
+# auditable: only add a synonym you would defend as genuinely the same skill.
 _FAMILIES: tuple[tuple[str, ...], ...] = (
     ("kubernetes", "k8s"),
     ("machine learning", "ml"),
@@ -94,7 +94,7 @@ def _pattern_for(term: str) -> re.Pattern | None:
         # models' was previously missed). Hyphens/symbols inside a token are kept literal.
         alt = "|".join(r"\s+".join(re.escape(p) for p in f.split(" ")) for f in forms)
         # Word-char lookarounds (not \b) so symbol-bearing forms ("ci/cd", "c++", ".net",
-        # "c#") still match — a trailing \b never asserts right after a symbol. The optional
+        # "c#") still match. A trailing \b never asserts right after a symbol. The optional
         # trailing ``s?`` restores the plural leniency the old substring matcher had
         # (transformer↔transformers, pipeline↔pipelines) while the boundary still blocks
         # fragment bleed (engine↮engineers, scala↮scalable). No IGNORECASE: term_in matches
@@ -105,7 +105,7 @@ def _pattern_for(term: str) -> re.Pattern | None:
 
 
 def term_in(term: str, text: str) -> bool:
-    """True when ``term`` — or any of its curated aliases — appears in ``text`` as a whole
+    """True when ``term`` (or any of its curated aliases) appears in ``text`` as a whole
     token/phrase (boundary-safe, case-insensitive). Fragments never match
     (``scala`` ∉ ``scalable``, ``engine`` ∉ ``engineer``, ``ms`` ∉ ``teams``)."""
     if not term or not text:
@@ -113,12 +113,12 @@ def term_in(term: str, text: str) -> bool:
     forms = surface_forms(term)
     if not forms:
         return False
-    # Match against a lowercased copy (skipped when already lower — the hot path from the
-    # scorers, which lowercase upstream). The substring pre-check is a NECESSARY condition
-    # for a boundary match, and `in` is C-fast, so it skips the regex for the ~90% of terms
-    # that don't occur at all — ~5x faster on a full-corpus rescore, identical results.
+    # Match against a lowercased copy (skipped when already lower, since that's the hot
+    # path from the scorers, which lowercase upstream). The substring pre-check is a NECESSARY
+    # condition for a boundary match, and `in` is C-fast, so it skips the regex for the ~90% of
+    # terms that don't occur at all: about 5x faster on a full-corpus rescore, identical results.
     low = text if text.islower() else text.lower()
-    # Pre-check on the FIRST token of each form — a necessary condition that survives line-wraps
+    # Pre-check on the FIRST token of each form: a necessary condition that survives line-wraps
     # (the full-phrase substring would not, now that internal spaces match \s+).
     if not any(f.split(" ", 1)[0] in low for f in forms):
         return False

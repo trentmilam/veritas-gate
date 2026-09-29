@@ -5,7 +5,7 @@
 
 --reason is required and permanent: this scores the SACRED test split, and every run appends one
 line to the committed benchmark/TEST_SET_ACCESS_LOG.jsonl. Iterate freely against the train split
-instead with `python benchmark/dev_run.py` -- nothing there needs a reason, because nothing there is
+instead with `python benchmark/dev_run.py`; nothing there needs a reason, because nothing there is
 the number that gets published. See "TEST-SET ACCESS DISCIPLINE" below for why this exists.
 
 CI never runs this file with real data. It runs `python benchmark/run.py --fixture` against a small
@@ -18,7 +18,7 @@ is committed here. Regenerate with `python benchmark/fixtures/build_synthetic_fi
 WHAT THIS DOES AND DOES NOT MEASURE
 -----------------------------------
 veritas-gate was extracted from a resume-tailoring pipeline. Most of its checks encode
-job-application knowledge -- forbidden skill lists, credential tables, employer attribution, a
+job-application knowledge: forbidden skill lists, credential tables, employer attribution, a
 hardcoded aerospace-employer index, an ATS rubric. Those are meaningless on news summarization and
 running them here would produce a number about nothing.
 
@@ -36,23 +36,23 @@ THE CEILING, STATED UP FRONT
 ----------------------------
 Both surviving checks are digit matchers. Measured on the corpus: only 20.8% of RAGTruth's 14,289
 annotated hallucination spans contain any digit at all. The rest are fabricated names, relations,
-entities and claims -- invisible to a digit matcher by construction. Recall against the full
+entities and claims, invisible to a digit matcher by construction. Recall against the full
 hallucination label is therefore capped near 0.21 no matter how good the implementation is.
 
-That is not a defect to tune away. It is the honest scope of what two numeric checks can do, and
+That is not a defect to tune away. It is the scope of what two numeric checks can do, and
 the reason this report is titled "numeric groundedness", not "hallucination detection".
 
 TC-6's count-noun list ships UNMODIFIED. It is resume vocabulary (postings, tests, commits, LOC)
 and will barely fire on news text. Extending it by reading RAGTruth would be inventing detector
-vocabulary from the evaluation corpus -- the exact in-sample tuning this benchmark exists to avoid.
-The near-zero fire rate is accepted as an honest cost.
+vocabulary from the evaluation corpus, the exact in-sample tuning this benchmark exists to avoid.
+The near-zero fire rate is the accepted cost.
 
 TEST-SET ACCESS DISCIPLINE
 ---------------------------
 Nothing in a local script can PREVENT someone from re-running this against the test split until a
 number looks good. What it can do is make every access visible: a run against the real corpus
-requires `--reason "..."`, and that reason -- plus the sha256 of the detector source at the moment
-of the run -- is appended to benchmark/TEST_SET_ACCESS_LOG.jsonl, a file that is committed and never
+requires `--reason "..."`, and that reason (plus the sha256 of the detector source at the moment
+of the run) is appended to benchmark/TEST_SET_ACCESS_LOG.jsonl, a file that is committed and never
 truncated. Six runs while tuning a threshold show up as six dated lines in a PR diff, not as
 something a reviewer has no way to see.
 
@@ -85,14 +85,14 @@ RESULTS_PATH = HERE / "results.json"
 ACCESS_LOG = HERE / "TEST_SET_ACCESS_LOG.jsonl"
 
 GENERIC_VIOLATIONS = {"unverified_metric", "unverified_count"}
-# The three opt-in grounding.py checks -- broadened numeric, ungrounded entity, and
+# The three opt-in grounding.py checks: broadened numeric, ungrounded entity, and
 # content-word novelty window. Off by default in TruthChecker; _grounding_checker() below turns
 # all three on so this violation set is exactly what fires.
 GROUNDING_VIOLATIONS = {"unverified_number", "ungrounded_entity", "novel_content_window"}
 MIN_SAMPLE = 200          # below this the run reports BLOCKED and no quality number
 
 # The exact files that constitute "the detector" for provenance purposes. Anything that changes what
-# gets scored belongs in this tuple -- if a new check is added to grounding.py and wired through
+# gets scored belongs in this tuple; if a new check is added to grounding.py and wired through
 # checker.py, add its module here too, or the content-hash gate stops meaning what it claims to.
 CHECKER_FILES = (SRC / "checker.py", SRC / "aliases.py", SRC / "claim_rules.py")
 GROUNDING_FILES = CHECKER_FILES + (SRC / "grounding.py",)
@@ -105,7 +105,7 @@ def _file_hash(*paths: Path) -> str:
     the source's content: with `.gitattributes`' `text=auto eol=lf`, a Windows working tree that
     predates it still holds CRLF while a fresh Linux CI checkout gets LF, and the two hash
     differently for byte-identical code. That breaks the gate in the exact place it is supposed to
-    work -- a CI run would fail the provenance assertion on a source file nobody edited, while the
+    work: a CI run would fail the provenance assertion on a source file nobody edited, while the
     real question ("did the detector change?") went unanswered. A CRLF->LF conversion is by
     definition not a detector change, so it must not move this hash.
     """
@@ -118,7 +118,7 @@ def _file_hash(*paths: Path) -> str:
 def evidence_for(source_row: dict) -> str:
     """The grounding context the human annotators judged against.
 
-    NOT the ``source`` field -- that is only the dataset name ("MARCO", "CNN/DM", "Yelp"). The
+    NOT the ``source`` field: that is only the dataset name ("MARCO", "CNN/DM", "Yelp"). The
     actual context is ``source_info``: a plain string for Summary, and a dict for QA (question +
     passages) and Data2txt (structured business record). Dicts are serialized rather than
     cherry-picked so every figure available to the generating model is in the evidence bank.
@@ -134,7 +134,7 @@ def digit_span_ceiling(responses: list) -> tuple[int, int]:
 
     This is the single most important number in the report when only the two digit checks are
     enabled. Both are digit matchers, so a hallucination span with no digit in it is invisible to
-    them by construction -- this ratio is the hard ceiling on recall, independent of implementation
+    them by construction; this ratio is the hard ceiling on recall, independent of implementation
     quality. Computed here rather than quoted from a one-off script so the documented command
     reproduces every published figure.
     """
@@ -149,7 +149,7 @@ def digit_span_ceiling(responses: list) -> tuple[int, int]:
 
 def load() -> tuple[list, dict]:
     """The real, pinned RAGTruth corpus. Re-verifies the checksum on EVERY call, not only at fetch
-    time -- a file swapped or corrupted after `fetch_data.py` succeeded once must still be caught
+    time; a file swapped or corrupted after `fetch_data.py` succeeded once must still be caught
     before it silently produces different numbers."""
     resp_path, src_path = DATA / "response.jsonl", DATA / "source_info.jsonl"
     if not resp_path.exists() or not src_path.exists():
@@ -170,7 +170,7 @@ def load() -> tuple[list, dict]:
 
 
 def load_fixture() -> tuple[list, dict]:
-    """A small, committed, SYNTHETIC fixture -- see benchmark/fixtures/. Not a slice of the real
+    """A small, committed, SYNTHETIC fixture: see benchmark/fixtures/. Not a slice of the real
     test split and not third-party text: it is generated so the harness logic can be checked
     offline without redistributing corpus source passages. No network, no test-set access;
     regenerated only by `benchmark/fixtures/build_synthetic_fixture.py`, never by CI."""
@@ -198,12 +198,12 @@ def score(test_rows: list, all_responses: list, sources: dict, *, min_sample: in
          checker_factory=_default_checker, violation_types=None) -> "dict | None":
     """Score ``test_rows`` (already filtered to the split under evaluation) against ``sources``.
 
-    ``all_responses`` is the population ``digit_span_ceiling`` scans -- deliberately not just
+    ``all_responses`` is the population ``digit_span_ceiling`` scans, deliberately not just
     ``test_rows``, matching the original benchmark's behaviour of reporting the ceiling over
     whichever corpus was loaded, not only the scored slice.
 
     Pure and side-effect-free: no file writes, no stdout. Returns ``None`` (having printed BLOCKED)
-    when ``test_rows`` is under ``min_sample`` -- this IS the guard `TestBlockedPath` exercises.
+    when ``test_rows`` is under ``min_sample``: this IS the guard `TestBlockedPath` exercises.
     """
     if len(test_rows) < min_sample:
         print(f"BLOCKED: {len(test_rows)} rows < {min_sample} required. No quality number reported.")
@@ -266,12 +266,12 @@ def score(test_rows: list, all_responses: list, sources: dict, *, min_sample: in
                            sum(1 for x in rows if x["task"] == t and not x["pred"] and x["gold"]))
                     for t in sorted({x["task"] for x in rows})},
     }
-    # Deliberately NOT under a persisted top-level key -- wall-clock timing varies between runs by
+    # Deliberately NOT under a persisted top-level key: wall-clock timing varies between runs by
     # construction, and `results.json`'s determinism claim (byte-identical across runs) depends on
     # every persisted field being a pure function of the input, not of when it happened to run.
     # `main()` strips this key before writing the file; `print_report` reads it separately. An
     # earlier version of this refactor put timing straight into the returned dict and broke exactly
-    # this -- caught by the full-pipeline determinism test, not by inspection.
+    # this, caught by the full-pipeline determinism test, not by inspection.
     out["_timing"] = {
         "check_seconds_per_response": check_seconds / n if n else 0.0,
         "full_seconds_per_response": full_seconds / n if n else 0.0,

@@ -1,11 +1,11 @@
 """ATS / rubric-aware resume fortification (truth-preserving).
 
-Grades a tailored resume the way applications are actually screened — ATS keyword
-coverage, quantification (STAR-style metrics), and ATS-safe formatting — and surfaces the
+Grades a tailored resume the way applications are actually screened: ATS keyword
+coverage, quantification (STAR-style metrics), and ATS-safe formatting. It surfaces the
 TRUTHFUL missing keywords the candidate's profile already supports. It never invents
 claims: JD terms the profile cannot back are returned as ``qa_gaps`` (questions for the QA
-session), NOT as resume suggestions. The hard anti-fabrication gate stays the
-the truth checker; this layer is the offensive, evidence-bounded optimizer.
+session), NOT as resume suggestions. The hard anti-fabrication gate stays the truth checker;
+this layer is the offensive, evidence-bounded optimizer.
 
 Research basis (2026): ATS (97.8% of F500, 99.7% keyword filters) reward ~85% JD keyword
 match but penalize stuffing (~30%); Greenhouse-style scorecards grade must-have competencies;
@@ -31,23 +31,23 @@ _GAP_VOCAB = (
 
 
 def _candidate_keywords() -> frozenset:
-    """Library default: no built-in candidate keywords -- pass them explicitly."""
+    """Library default: no built-in candidate keywords, pass them explicitly."""
     return frozenset()
 
 _STD_HEADERS = ("summary", "experience", "skills", "education")
 _BULLET_RE = re.compile(r"^\s*[-*•]\s+")
 # Gap-vocab entries that are REQUIREMENTS / anti-signals, not skills to MIRROR. Keeping them in the
-# coverage pool let a résumé earn keyword credit for echoing "PhD" / "on-call" / "5+ years" — worse
+# coverage pool let a résumé earn keyword credit for echoing "PhD" / "on-call" / "5+ years", worse
 # than useless (mirroring a constraint you don't meet). They still surface as gaps via curate; they
 # just must not inflate keyword coverage here.
 _NON_SKILL_GAP = {"security clearance", "phd", "5+ years", "10+ years", "on-call"}
-# Seniority/filler tokens stripped from a JD title before measuring headline alignment — we reward
+# Seniority/filler tokens stripped from a JD title before measuring headline alignment: we reward
 # mirroring the ROLE ("ml infra engineer"), never the seniority claim ("senior"/"staff").
 _TITLE_STOP = {
     "the", "a", "an", "of", "and", "for", "to", "in", "ii", "iii", "sr", "jr",
     "senior", "staff", "lead", "principal", "junior", "i",
 }
-# A bullet is QUANTIFIED only if it carries a real IMPACT figure — a percentage, a dollar amount, an
+# A bullet is QUANTIFIED only if it carries a real IMPACT figure: a percentage, a dollar amount, an
 # N× multiplier, a comma-grouped thousand, or a k/m/b magnitude. Bare integers ("3 years",
 # "5-person team"), versions ("Python 3.11") and years ("2024") are NOT impact metrics; the old
 # "any digit" rule rewarded number-stuffing without rewarding real results.
@@ -59,13 +59,13 @@ _IMPACT_RE = re.compile(
     r"|\b\d+(?:\.\d+)?\s*[kmb]\b",  # 5M / 100k / 1.2b
     re.IGNORECASE,
 )
-# A markdown table's defining delimiter row, e.g. ``| --- | :--: |`` — the thing that makes a
+# A markdown table's defining delimiter row, e.g. ``| --- | :--: |``, the thing that makes a
 # renderer/ATS treat the block as a column grid (vs. a lone "City | Phone" inline separator).
 _MD_TABLE_SEP_RE = re.compile(r"\|?\s*:?-{3,}:?\s*\|")
 
 
 def _jd_terms(jd: str, cand: frozenset) -> set:
-    """Relevant SKILL terms appearing in the JD — the candidate's own keywords (things they have)
+    """Relevant SKILL terms appearing in the JD: the candidate's own keywords (things they have)
     plus the skill-bearing gap vocabulary (things a JD commonly requires). Requirement/anti-signal
     gap entries (PhD / on-call / N+ years / clearance) are excluded so they can't earn coverage
     credit for being mirrored."""
@@ -77,7 +77,7 @@ def title_alignment_pct(resume_text: str, posting: dict) -> int:
     """0-100: does the résumé's headline zone (first ~3 non-empty lines = name + positioning
     headline) mirror the JD title's significant tokens? Title/headline alignment is the single
     highest-weight real ATS signal (Workday), so the rubric rewards a TRUTHFUL title-mirroring
-    headline. Seniority words are stripped (``_TITLE_STOP``) — we reward
+    headline. Seniority words are stripped (``_TITLE_STOP``); we reward
     matching the role, never the seniority claim. Synonym-aware via ``aliases.term_in``."""
     toks = {w for w in re.findall(r"[a-z][a-z+/#.\-]{1,}", (posting.get("title") or "").lower())
             if w not in _TITLE_STOP}
@@ -96,7 +96,7 @@ def _is_header(line: str, header: str) -> bool:
 
 
 def _experience_bullets(resume_text: str) -> list[str]:
-    """Bullet lines inside the EXPERIENCE section only — delimited by the EXPERIENCE header and the
+    """Bullet lines inside the EXPERIENCE section only: delimited by the EXPERIENCE header and the
     next standard section header (SKILLS / SUMMARY / EDUCATION). A SKILLS list is bullets too, and
     skills lines never carry numbers, so counting them unfairly deflates the quantified-bullets
     ratio. Falls back to ALL bullets when the resume has no recognizable EXPERIENCE header."""
@@ -117,7 +117,7 @@ def ats_rubric_score(
 ) -> dict:
     """Score a resume draft against the posting. Returns an application-strength dict:
     ``score`` (0-100), ``keyword_pct`` + ``present`` + ``add_truthful`` (profile-supported
-    terms the resume omitted — safe to add) + ``qa_gaps`` (JD wants, profile can't back —
+    terms the resume omitted, safe to add) + ``qa_gaps`` (JD wants, profile can't back,
     ask in QA, never invent), ``quant_pct``, and ``format_flags``/``format_score``."""
     cand = candidate_keywords if candidate_keywords is not None else _candidate_keywords()
     jd = f" {(posting.get('title') or '')} {(posting.get('description') or '')} ".lower()
@@ -132,10 +132,10 @@ def ats_rubric_score(
     kw_pct = round(100 * len(present) / len(terms)) if terms else 0
 
     bullets = [ln for ln in (resume_text or "").splitlines() if _BULLET_RE.match(ln)]
-    # Quantified-bullets ratio is over EXPERIENCE bullets only — a SKILLS list never carries
+    # Quantified-bullets ratio is over EXPERIENCE bullets only: a SKILLS list never carries
     # numbers, so including it would unfairly drag the percentage down (and the score with it).
     exp_bullets = _experience_bullets(resume_text or "")
-    # Quantified = carries a real IMPACT metric (%, $, ×, thousands, k/m/b) — NOT just "any digit"
+    # Quantified = carries a real IMPACT metric (%, $, ×, thousands, k/m/b), NOT just "any digit"
     # (which rewarded years / versions / "3 years").
     quant_pct = (
         round(100 * sum(1 for b in exp_bullets if _IMPACT_RE.search(b)) / len(exp_bullets))
@@ -152,7 +152,7 @@ def ats_rubric_score(
     # Real ATS-hostile layout = a multi-COLUMN grid (the parser reads across columns and scrambles
     # field order), NOT an inline "City | Phone | Email" separator on one linear text line (ATS-safe).
     # Flag only an HTML table, a markdown delimiter row, or 2+ CONSECUTIVE rows each carrying 2+ pipes
-    # (a real column grid / pipe-wall). A lone separator line must not trip this — penalizing it
+    # (a real column grid / pipe-wall). A lone separator line must not trip this; penalizing it
     # docked every clean résumé 25 pts for a non-problem and made the strength score untrustworthy.
     _pipey = [ln.count("|") >= 2 for ln in rlines]
     _pipe_grid = any(a and b for a, b in zip(_pipey, _pipey[1:]))
@@ -163,12 +163,12 @@ def ats_rubric_score(
         fmt_flags.append("use bullet points for achievements")
     fmt_score = max(0, 100 - 25 * len(fmt_flags))
 
-    # Title/headline alignment — the highest-weight REAL ATS signal.
+    # Title/headline alignment: the highest-weight REAL ATS signal.
     title_pct = title_alignment_pct(resume_text, posting)
 
     # Anti-stuffing: coverage rewards breadth; this opposes REPETITION.
-    # Research: keyword stuffing REDUCES outcomes ~30%. The honest signal is a single term repeated
-    # many times — NOT aggregate keyword density (a concise skills list is legitimately keyword-dense,
+    # Research: keyword stuffing REDUCES outcomes ~30%. The real signal is a single term repeated
+    # many times, NOT aggregate keyword density (a concise skills list is legitimately keyword-dense,
     # so an aggregate-density penalty wrongly docks clean résumés). A central skill ("python") may
     # appear a handful of times; only the EXCESS above 6 occurrences of any one term is penalized,
     # soft-ramped and capped, so a clean draft pays ~0 and only genuine cramming/runaway is docked.
@@ -199,14 +199,14 @@ def ats_rubric_score(
 
 
 def jd_keyword_gap(posting: dict, candidate_keywords: Optional[frozenset] = None) -> dict:
-    """JD-vs-candidate keyword gap — **no resume needed** (vs. :func:`ats_rubric_score`, which grades
+    """JD-vs-candidate keyword gap: **no resume needed** (vs. :func:`ats_rubric_score`, which grades
     an existing draft). Decided the single highest ATS lever in the 2026 market research: postings get
     filtered for naming the JD's exact tool terms. Surfaced at the apply decision so the candidate
     knows, before tailoring, which terms to MIRROR verbatim (JD asks AND evidence backs it) and which
-    are GAPS (JD asks, no evidence — never fake). Reuses the same ``_jd_terms`` + candidate-keyword
+    are GAPS (JD asks, no evidence, never fake). Reuses the same ``_jd_terms`` + candidate-keyword
     primitives as :func:`ats_rubric_score`, so the cockpit gap view and the résumé scorer agree.
 
-    Returns ``mirror`` (put these in the résumé), ``gaps`` (don't fake — QA/learn), ``coverage``
+    Returns ``mirror`` (put these in the résumé), ``gaps`` (don't fake, QA/learn), ``coverage``
     (% of relevant JD terms the candidate can truthfully back), and ``jd_term_count``.
     """
     cand = candidate_keywords if candidate_keywords is not None else _candidate_keywords()

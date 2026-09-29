@@ -2,21 +2,21 @@
 
 TC-3 (unverified_metric) and TC-6 (unverified_count) in ``checker.py`` are digit matchers, and only
 20.8% of RAGTruth's annotated hallucination spans contain a digit (``benchmark/`` measures this
-directly) -- so those two checks structurally cannot see 79.2% of the problem. The three checks
+directly), so those two checks structurally cannot see 79.2% of the problem. The three checks
 here target that remainder with the same deterministic, no-LLM-judge approach: nothing here is a
 semantic entailment check, all three are literal-token presence tests against the evidence text.
 
 Each is opt-in and OFF by default when wired into ``TruthChecker`` (unlike TC-3/TC-6, which always
-run) -- see the ``enable_broadened_numeric`` / ``enable_entity_grounding`` / ``enable_novelty_check``
+run); see the ``enable_broadened_numeric`` / ``enable_entity_grounding`` / ``enable_novelty_check``
 constructor flags. Freeze any threshold/window change only via ``benchmark/tune.py``'s train-split
-CV, then cite the winning number in the comment here -- never hand-tune against a number you've
+CV, then cite the winning number in the comment here; never hand-tune against a number you've
 already seen on the test split.
 """
 from __future__ import annotations
 
 import re
 
-# Standard closed-class English function words -- excluded from "content word" status everywhere in
+# Standard closed-class English function words: excluded from "content word" status everywhere in
 # this module. Deliberately NOT imported from checker.py's _digits_in / anything else there: this
 # module has zero dependency on checker.py so checker.py can import FROM here without a circular
 # import (checker.py wires these checks into TruthChecker.check()).
@@ -31,12 +31,12 @@ per via vs etc
 """.split())
 
 # Sentence-opening words that are commonly capitalized purely by position ("The company shipped...",
-# "In 2019, the team..."), not because they name an entity -- so a capitalized opener doesn't get
+# "In 2019, the team..."), not because they name an entity, so a capitalized opener doesn't get
 # flagged as a proper noun. Overlaps _STOPWORDS heavily but is NOT a subset of it: discourse markers
 # that open sentences without being function words ("According", "However", "Moreover", "Since",
 # "Thus", "Whereas") belong here and not there. Order matters in ungrounded_entities(): the stopword
 # filter runs first, so a word in both sets is dropped regardless of position, and a word only here
-# is dropped only at position 0 -- which is the intent.
+# is dropped only at position 0, which is the intent.
 _SENTENCE_OPENERS = frozenset("""
 the this that these those it in on at for with according additionally also after although and
 as because before but by during either following from given however if moreover of once only or
@@ -56,7 +56,7 @@ def _numeric_tokens(text: str) -> set:
     The trailing-punctuation strip is the one deliberate difference from ``_digits_in``, and it is a
     bug fix, not a variation: ``\\d[\\d.,]*`` is greedy, so a figure that ends a sentence tokenizes
     WITH its period ("shipped in 2019." -> "2019."). Comparing that against the same figure
-    mid-sentence in a draft ("2019") then reports a grounded number as ungrounded -- a pure false
+    mid-sentence in a draft ("2019") then reports a grounded number as ungrounded: a pure false
     positive produced by punctuation. Both sides normalize here, so they compare equal. An internal
     decimal point is preserved ("4.5" stays "4.5"); only trailing '.'/',' are dropped.
     """
@@ -65,7 +65,7 @@ def _numeric_tokens(text: str) -> set:
 
 
 def broadened_numeric_ungrounded(draft_text: str, evidence_text: str) -> list:
-    """Every digit token in ``draft_text`` absent from ``evidence_text`` -- the same digit matcher
+    """Every digit token in ``draft_text`` absent from ``evidence_text``: the same digit matcher
     TC-3/TC-6 use, without their %/$/multiplier/count-noun restriction. Catches a bare fabricated
     figure ("in 2019 the team shipped 47 updates") neither existing check's pattern would match."""
     evidenced = _numeric_tokens(evidence_text)
@@ -73,14 +73,14 @@ def broadened_numeric_ungrounded(draft_text: str, evidence_text: str) -> list:
 
 
 def _content_words(text: str) -> set:
-    """Lowercased, stopword-filtered word set of ``text`` -- the shared "did the evidence mention
+    """Lowercased, stopword-filtered word set of ``text``: the shared "did the evidence mention
     this word at all" index both the entity check and the novelty-window check test against."""
     return {w.lower() for w in _WORD_RE.findall(text or "") if w.lower() not in _STOPWORDS}
 
 
 def ungrounded_entities(draft_text: str, evidence_text: str) -> list:
     """Capitalized tokens in ``draft_text`` that never appear (case-insensitively) in
-    ``evidence_text`` -- a cheap proxy for a fabricated proper noun (person, place, product) the
+    ``evidence_text``: a cheap proxy for a fabricated proper noun (person, place, product) the
     evidence never names. A sentence-initial token is excluded when it's a common sentence-opener
     (``_SENTENCE_OPENERS``), so ordinary capitalization from sentence position isn't mistaken for a
     name."""
@@ -97,7 +97,7 @@ def ungrounded_entities(draft_text: str, evidence_text: str) -> list:
                 continue
             # One finding per distinct name, in first-appearance order. A fabricated company named
             # eight times is one thing to fix, and eight identical violations bury the other
-            # findings -- the same cap claim_rules.py states for a repeated phrase. Deduplicating
+            # findings (the same cap claim_rules.py states for a repeated phrase). Deduplicating
             # cannot change WHETHER the check fires, only how many violations one firing produces.
             if low not in evidence_words and low not in seen:
                 seen.add(low)
@@ -107,7 +107,7 @@ def ungrounded_entities(draft_text: str, evidence_text: str) -> list:
 
 # Winner of benchmark/tune.py's train-split CV, measured 2026-08-08 over all 15,090 train
 # responses: window=10, threshold=0.6 -> P 58.2/R 87.1/F1 69.8, beating every other grid point
-# tried (window in 3/5/7/10, threshold in 0.6/0.8/1.0 -- see tune.py's printed table for the full
+# tried (window in 3/5/7/10, threshold in 0.6/0.8/1.0; see tune.py's printed table for the full
 # grid). Change only by re-running tune.py and citing the new winning number here.
 _NOVELTY_WINDOW = 10
 _NOVELTY_THRESHOLD = 0.6
@@ -121,8 +121,8 @@ def novel_content_windows(draft_text: str, evidence_text: str, *, window: int = 
 
     Overlapping qualifying windows are MERGED into one span rather than reported individually. A
     60-word ungrounded paragraph is one problem to fix, and emitting 51 near-identical violations for
-    it buries every other finding -- the same reasoning claim_rules.py states for its one-finding-
-    per-clause cap. Merging cannot change whether the check fires at all, only how many violations
+    it buries every other finding (the same reasoning claim_rules.py states for its one-finding-
+    per-clause cap). Merging cannot change whether the check fires at all, only how many violations
     one firing produces, so it does not affect any response-level benchmark number.
     """
     evidence_words = _content_words(evidence_text)
@@ -134,7 +134,7 @@ def novel_content_windows(draft_text: str, evidence_text: str, *, window: int = 
     for i in range(len(tokens) - window + 1):
         if sum(1 for t in tokens[i:i + window] if t not in evidence_words) / window < threshold:
             continue
-        if spans and i <= spans[-1][1]:          # overlaps or abuts the previous span -- extend it
+        if spans and i <= spans[-1][1]:          # overlaps or abuts the previous span: extend it
             spans[-1][1] = i + window
         else:
             spans.append([i, i + window])

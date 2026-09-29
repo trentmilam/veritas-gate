@@ -18,10 +18,10 @@ original check correct).
 
 CITED FINDING, NOT REPRODUCIBLE FROM THIS REPO
 In 2026 the full migration was measured against 9,963 real generated documents (36.7M characters)
-from a private corpus of real personal application data -- never vendored here, and this number
+from a private corpus of real personal application data (never vendored here), and this number
 cannot be reproduced from anything in this repository:
 
-  * A two-character term from a real capability check -- ``rl`` -- fired on 3,410 of 9,963
+  * A two-character term from a real capability check (``rl``) fired on 3,410 of 9,963
     documents where the equivalent regex fired on 107. A 31.9x blast radius, 3,328 of them pure
     false positives, because "rl" sits inside world, girl, early, hourly, quarterly.
   * ``done`` matches inside abandoned, condone, undone. ``grow`` matches inside outgrew.
@@ -34,17 +34,17 @@ cannot be reproduced from anything in this repository:
 WHAT IS REPRODUCIBLE: THE MECHANISM, NOT THAT NUMBER
 Bare-substring-vs-word-boundary blast radius is a property of English text in general, not of that
 one private corpus. ``benchmark/registry_blast_radius.py`` demonstrates it on the same public,
-pinned RAGTruth corpus the rest of ``benchmark/`` uses -- no private data, runnable by anyone who
+pinned RAGTruth corpus the rest of ``benchmark/`` uses: no private data, runnable by anyone who
 clones this repo. Measured there: ``rl`` never occurs as its own word in RAGTruth's test split (0
-word-boundary matches) yet fires on 598 of 2,700 documents as a bare substring -- 100% false
+word-boundary matches) yet fires on 598 of 2,700 documents as a bare substring: 100% false
 positives from words like airline, clearly, early, girl, world. Different number from the private
-finding (different corpus, different domain -- "rl" has zero legitimate technical-writing uses in
+finding (different corpus, different domain: "rl" has zero legitimate technical-writing uses in
 RAGTruth's news/QA/data-record text), same mechanism.
 
 So: a rule belongs here when its terms are multi-word and cannot occur inside a larger word.
 A rule belongs in code when it needs word boundaries, cross-sentence state, occurrence counting,
 open-ended numeric comparison, negative lookbehind, or the surrounding document. Adding a
-boundary-sensitive rule here does not make a gate stricter -- it makes it wrong in both directions
+boundary-sensitive rule here does not make a gate stricter; it makes it wrong in both directions
 at once, over-firing on substrings and under-firing on the real pattern.
 
 NEAREST-MARKER ATTRIBUTION
@@ -59,7 +59,7 @@ attributed to whichever subject's marker sits NEAREST to it in the sentence, so 
 to "migration workstream" and the sentence passes. Rewrite it as "I was assigned to the retrieval
 platform" and the nearest marker changes, so it fires.
 
-Rules are plain lists of dicts -- load them from JSON, a literal, or your own YAML reader. This
+Rules are plain lists of dicts: load them from JSON, a literal, or your own YAML reader. This
 module stays zero-dependency and does not pick a config format for you.
 """
 from __future__ import annotations
@@ -104,7 +104,7 @@ def load_rules(source: Any) -> tuple:
     #     raises PermissionError on a directory. Hence is_file(), not exists().
     #   * Path(<a long JSON string>).is_file() RAISES OSError (ENAMETOOLONG) on Linux once the
     #     string exceeds ~255 bytes, while Windows quietly returns False. A single try block around
-    #     both steps swallowed that and returned no rules for every realistic JSON payload -- green
+    #     both steps swallowed that and returned no rules for every realistic JSON payload: green
     #     on Windows, red on CI.
     text: Optional[str] = None
     try:
@@ -137,7 +137,7 @@ def _first_hit(haystack_low: str, needles: Optional[Iterable]) -> Optional[str]:
 
 
 def _positions(haystack_low: str, needles: Optional[Iterable]) -> list[int]:
-    """Every offset at which any needle occurs -- all occurrences, not just the first.
+    """Every offset at which any needle occurs: all occurrences, not just the first.
 
     All of them, because attribution compares distances: a subject marker that appears twice in a
     sentence must be able to claim a term next to EITHER occurrence.
@@ -233,7 +233,7 @@ def check_claim_rules(draft_text: str, rules: Any) -> list[RuleFinding]:
 
 
 def prompt_rules_block(rules: Any) -> str:
-    """The registry rendered as system-prompt instructions -- the same rows the gate enforces, so a
+    """The registry rendered as system-prompt instructions: the same rows the gate enforces, so a
     new rule reaches the model and the checker from a single edit.
 
     Rows flagged ``render_to_prompt: false`` are omitted deliberately. For some rules, naming the

@@ -11,7 +11,7 @@ def is_degenerate(
     into ``AI futures, AI potentials, AI possibilities, …`` for thousands of tokens. The truth
     gate passes it (no false CLAIMS) and the length floor passes it (it's huge), so it needs its
     own check. Two cheap signals, either fires:
-      (1) a long draft with a collapsed vocabulary — unique/total token ratio below the floor;
+      (1) a long draft with a collapsed vocabulary: unique/total token ratio below the floor;
       (2) a long run of consecutive comma-separated items sharing the same leading word.
     Thresholds carry a wide margin: a real résumé's unique-token ratio is well above 0.30 and it
     never repeats a leading word 30× in a row (the broken artifact's run is in the hundreds)."""

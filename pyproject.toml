@@ -12,7 +12,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = []  # zero runtime deps — pure standard library
+dependencies = []  # zero runtime deps, pure standard library
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

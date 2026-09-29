@@ -1,4 +1,4 @@
-"""rubric_score — deterministic, no-LLM-judge quality scoring, on generic data."""
+"""rubric_score: deterministic, no-LLM-judge quality scoring, on generic data."""
 from __future__ import annotations
 
 from veritas_gate import jd_keyword_gap, rubric_score, title_alignment_pct
@@ -44,7 +44,7 @@ def test_quantified_requires_real_impact_metric() -> None:
 
 
 class TestJdKeywordGap:
-    """No résumé needed -- JD-vs-candidate terms only. Distinct from rubric_score, which grades an
+    """No résumé needed: JD-vs-candidate terms only. Distinct from rubric_score, which grades an
     existing draft; this decides what to mirror/gap BEFORE writing one."""
 
     def test_full_coverage_when_every_jd_term_is_in_the_candidate_keywords(self) -> None:
@@ -62,7 +62,7 @@ class TestJdKeywordGap:
         assert "python" in out["mirror"]
 
     def test_requirement_anti_signals_never_count_as_gaps(self) -> None:
-        # PhD/on-call/N+ years are requirement vocabulary, not skills to mirror or gap -- excluded
+        # PhD/on-call/N+ years are requirement vocabulary, not skills to mirror or gap, excluded
         # entirely so a résumé can't earn coverage credit for echoing a constraint it doesn't meet.
         posting = {"title": "Engineer", "description": "PhD required, 5+ years, on-call rotation"}
         out = jd_keyword_gap(posting, candidate_keywords=KW)

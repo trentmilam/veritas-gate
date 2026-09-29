@@ -1,4 +1,4 @@
-"""TruthChecker — deterministic claim-verification gating, on generic example data."""
+"""TruthChecker: deterministic claim-verification gating, on generic example data."""
 from __future__ import annotations
 
 from veritas_gate import TruthChecker
@@ -76,7 +76,7 @@ PHRASE_RULES = [{
 
 
 class TestClaimRulesWiring:
-    """The declarative registry (claim_rules.py) is inert unless a caller passes claim_rules= --
+    """The declarative registry (claim_rules.py) is inert unless a caller passes claim_rules=:
     this is the integration point, not claim_rules.py's own contract tests (test_claim_rules.py)."""
 
     def test_inert_when_no_rules_configured(self) -> None:
@@ -98,7 +98,7 @@ class TestClaimRulesWiring:
 
     def test_a_capitalized_high_severity_still_blocks(self) -> None:
         # claim_rules.py never normalizes a caller-authored severity string's case. A rule written
-        # as "High" (a natural JSON-authoring variant) must still gate exactly like "high" -- not
+        # as "High" (a natural JSON-authoring variant) must still gate exactly like "high", not
         # silently pass through add_violation()'s/generate_summary()'s exact-string comparisons.
         rules = [{
             "id": "capitalized-severity", "violation_type": "overclaim", "severity": "High",

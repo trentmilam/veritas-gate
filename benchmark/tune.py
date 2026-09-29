@@ -1,6 +1,6 @@
 """Train-split-only CV for the grounding checks (src/veritas_gate/grounding.py).
 
-Never touches the test split -- structural hyperparameters (novelty window size, novelty
+Never touches the test split. Structural hyperparameters (novelty window size, novelty
 threshold) may be tuned here freely. Writes nothing automatically: a human reads the printed
 table, picks the winner, and copies it into grounding.py's _NOVELTY_WINDOW/_NOVELTY_THRESHOLD with
 a comment citing the number this script printed.
