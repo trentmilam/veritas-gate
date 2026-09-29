@@ -1,6 +1,6 @@
 # veritas-gate
 
-**A deterministic, domain-configured gate for LLM-generated text, and an honest measurement of how far that gets you.**
+**A deterministic, domain-configured gate for LLM-generated text, and a measurement of exactly where that approach stops working.**
 
 > Plain-language writeup of the negative result and why it shipped anyway:
 > [trentmilam.dev/work/veritas-gate](https://trentmilam.dev/work/veritas-gate/)
